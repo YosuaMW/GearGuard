@@ -32,12 +32,22 @@ ESP32 + sensor ──MQTT──► Raspberry Pi (edge gateway)
 ## Status (13 Okt 2026)
 
 - ✅ MQTT → database, deteksi mesin berhenti, bot Telegram bertanya
-- ✅ Jawaban teks & voice note operator tersimpan
+- ✅ Jawaban teks & voice note operator → kategori (mode mock, siap disambung ke AMD)
 - ✅ 4 mesin (m1 live, m2–m4 replay simulator)
 - ✅ Deteksi anomali z-score + peringatan dini detail di Telegram, perintah `/status`
 - ✅ `/machines` sesuai format frontend, CORS, HTTPS publik via Tailscale Funnel
+- ✅ Docker Compose, auto-start saat boot
 - ⏳ `/events`, `/alerts`, `/availability`, `/pareto` (menunggu `types.ts`)
-- ⏳ Integrasi `/transcribe` + `/classify` (Rabu) dan `/explain` + `/score` (Kamis)
+- ⏳ `/transcribe` + `/classify` asli (Rabu), `/explain` + `/score` (Kamis)
+
+## Menjalankan
+
+```
+cp .env.example .env        # isi token Telegram, dll.
+docker compose up -d --build
+docker compose --profile sim up -d sim   # opsional: simulator mesin replay
+```
+Detail lengkap: [docs/raspi-setup.md](docs/raspi-setup.md).
 
 ## Aturan repo
 

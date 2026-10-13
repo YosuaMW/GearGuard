@@ -101,7 +101,7 @@ Lalu ketik `/status` di bot Telegram, atau buka `/machines` di API.
 Deteksi anomali membandingkan data dengan kondisi normal tiap mesin. Baseline `m1` sekarang masih dari simulasi, jadi:
 
 1. Jalankan rig **normal** (tanpa gangguan) selama **15–30 menit**.
-2. Minta Yosua menjalankan `python tools/baseline.py --minutes 30` di Raspi.
+2. Minta Yosua menjalankan `docker compose exec worker python /app/tools/baseline.py --minutes 30` di Raspi.
 
 Tanpa langkah ini, data asli akan langsung dianggap anomali.
 
@@ -138,5 +138,5 @@ Rekam: data normal 30–60 menit, plus 3 jenis gangguan (mis. baling-baling dibe
 
 Data dari rig yang sudah masuk database juga bisa langsung diekspor oleh Yosua:
 ```
-psql "$DATABASE_URL" -c "\copy (SELECT ts,machine_id,current_a,vib_rms,temp_c FROM telemetry WHERE machine_id='m1' ORDER BY ts) TO 'm1.csv' CSV HEADER"
+docker compose exec -T db psql -U siaga -d siagamesin -c "\copy (SELECT ts,machine_id,current_a,vib_rms,temp_c FROM telemetry WHERE machine_id='m1' ORDER BY ts) TO STDOUT CSV HEADER" > m1.csv
 ```
