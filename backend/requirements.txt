@@ -4,3 +4,4 @@ asyncpg
 aiomqtt
 httpx
 python-dotenv
+tzdata
