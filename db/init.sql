@@ -56,3 +56,16 @@ INSERT INTO machines (machine_id, name, source) VALUES
   ('m3', 'Water Pump',   'replay'),
   ('m4', 'Conveyor B',   'replay')
 ON CONFLICT (machine_id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS ai_calls (
+  id                SERIAL PRIMARY KEY,
+  ts                TIMESTAMPTZ DEFAULT now(),
+  endpoint          TEXT,       -- transcribe | classify | explain
+  model             TEXT,
+  latency_ms        INT,
+  prompt_tokens     INT,
+  completion_tokens INT,
+  ok                BOOLEAN,
+  mock              BOOLEAN,
+  error             TEXT
+);

@@ -12,6 +12,8 @@ from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
+from app import ai  # noqa: E402  (setelah .env dimuat)
+
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 API = f"https://api.telegram.org/bot{TOKEN}"
@@ -132,6 +134,65 @@ async def download_voice(c, file_id, event_id):
     return f
 
 
+async def save_classification(pool, ev_id, cls):
+    review = cls["confidence"] < ai.review_below()
+    category = ai.REVIEW_CATEGORY if review else cls["category"]
+    await pool.execute(
+        "UPDATE events SET category = $1, confidence = $2, needs_review = $3 WHERE id = $4",
+        category, cls["confidence"], review, ev_id,
+    )
+    print(f"[KATEGORI] event {ev_id}: {category} ({cls['confidence']:.2f}, {cls['source']})")
+    return review
+
+
+def result_text(ev_id, transcript, cls, review):
+    lines = [f"✅ Saved for event #{ev_id}"]
+    if transcript is not None:
+        lines.append(f"📝 <i>{html.escape(transcript)}</i>")
+    if review:
+        lines.append(
+            f"⚠️ Category unclear (best guess: {html.escape(cls['category'])}, {cls['confidence']:.0%}). "
+            "Marked <b>Needs review</b> on the dashboard."
+        )
+    else:
+        lines.append(f"Category: <b>{html.escape(cls['category'])}</b> ({cls['confidence']:.0%})")
+    if cls["source"] != "amd":
+        lines.append("<i>(AI offline: keyword classifier used)</i>" if not ai.is_mock() else "<i>(AI mock mode)</i>")
+    return "\n".join(lines)
+
+
+async def process_text(pool, c, chat_id, msg_id, ev, text):
+    await pool.execute("UPDATE events SET transcript = $1 WHERE id = $2", text, ev["id"])
+    print(f"[JAWABAN] event {ev['id']}: {text}")
+    cls = await ai.classify(pool, text, ev["machine_id"])
+    review = await save_classification(pool, ev["id"], cls)
+    await send(c, chat_id, result_text(ev["id"], None, cls, review), msg_id)
+
+
+async def process_voice(pool, c, chat_id, msg_id, ev, file_id):
+    try:
+        f = await download_voice(c, file_id, ev["id"])
+        await pool.execute("UPDATE events SET voice_path = $1 WHERE id = $2", str(f), ev["id"])
+        print(f"[VOICE] event {ev['id']} disimpan di {f}")
+        await send(c, chat_id, f"🎙️ Voice note received for event #{ev['id']}. Processing…", msg_id)
+
+        tr = await ai.transcribe(pool, str(f))
+        if not tr or not tr["text"]:
+            await pool.execute("UPDATE events SET category = $1, needs_review = true WHERE id = $2",
+                               ai.REVIEW_CATEGORY, ev["id"])
+            await send(c, chat_id, "⚠️ Couldn't transcribe the voice note. It's saved and marked <b>Needs review</b>. "
+                                   "You can also reply with text.", msg_id)
+            return
+
+        await pool.execute("UPDATE events SET transcript = $1 WHERE id = $2", tr["text"], ev["id"])
+        cls = await ai.classify(pool, tr["text"], ev["machine_id"])
+        review = await save_classification(pool, ev["id"], cls)
+        await send(c, chat_id, result_text(ev["id"], tr["text"], cls, review), msg_id)
+    except Exception as e:
+        print("Gagal proses voice note:", e)
+        await send(c, chat_id, "⚠️ Something went wrong processing the voice note. Please reply with text.", msg_id)
+
+
 async def handle(pool, c, msg):
     chat_id = msg["chat"]["id"]
     if str(chat_id) != CHAT_ID:
@@ -150,33 +211,28 @@ async def handle(pool, c, msg):
         await send(c, chat_id, "Please <b>reply</b> to the machine-stopped question so your answer is linked to the right event.\nType /status to see all machines.")
         return
 
-    ev = await pool.fetchrow("SELECT id FROM events WHERE tg_message_id = $1", reply["message_id"])
+    ev = await pool.fetchrow("SELECT id, machine_id FROM events WHERE tg_message_id = $1", reply["message_id"])
     if not ev:
         await send(c, chat_id, "That message isn't a machine-stopped question.")
         return
 
     if "text" in msg:
-        await pool.execute("UPDATE events SET transcript = $1 WHERE id = $2", msg["text"], ev["id"])
-        await send(c, chat_id, f"✅ Answer saved for event #{ev['id']}\n<i>{html.escape(msg['text'])}</i>", msg["message_id"])
-        print(f"[JAWABAN] event {ev['id']}: {msg['text']}")
+        asyncio.create_task(process_text(pool, c, chat_id, msg["message_id"], ev, msg["text"]))
     elif "voice" in msg:
-        f = await download_voice(c, msg["voice"]["file_id"], ev["id"])
-        await pool.execute("UPDATE events SET voice_path = $1 WHERE id = $2", str(f), ev["id"])
-        await send(c, chat_id, f"🎙️ Voice note received for event #{ev['id']}. Processing…", msg["message_id"])
-        print(f"[VOICE] event {ev['id']} disimpan di {f}")
+        asyncio.create_task(process_voice(pool, c, chat_id, msg["message_id"], ev, msg["voice"]["file_id"]))
     else:
         await send(c, chat_id, "Please answer with text or a voice note.")
 
 
 async def main():
-    pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=3)
+    pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=4)
     offset = None
     async with httpx.AsyncClient(timeout=40) as c:
         await c.post(f"{API}/setMyCommands", json={"commands": [
             {"command": "status", "description": "Current condition of all machines"},
             {"command": "help", "description": "How to use this bot"},
         ]})
-        print("Bot siap menerima jawaban...")
+        print(f"Bot siap menerima jawaban... (AI: {'MOCK' if ai.is_mock() else 'AMD'})")
         while True:
             try:
                 params = {"timeout": 30}
