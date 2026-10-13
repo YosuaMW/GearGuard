@@ -1,0 +1,15 @@
+[Unit]
+Description=SiagaMesin worker (MQTT -> DB, deteksi berhenti & anomali)
+After=network-online.target postgresql.service mosquitto.service
+Wants=network-online.target
+
+[Service]
+User=yosua
+WorkingDirectory=/home/yosua/hackathon/siagamesin/backend
+ExecStart=/home/yosua/hackathon/siagamesin/.venv/bin/python -m app.worker
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

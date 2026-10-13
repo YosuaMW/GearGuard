@@ -1,0 +1,15 @@
+[Unit]
+Description=SiagaMesin API (FastAPI)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=yosua
+WorkingDirectory=/home/yosua/hackathon/siagamesin/backend
+ExecStart=/home/yosua/hackathon/siagamesin/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

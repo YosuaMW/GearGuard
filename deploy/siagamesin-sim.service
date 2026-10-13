@@ -1,0 +1,14 @@
+[Unit]
+Description=SiagaMesin simulator (mesin replay)
+After=mosquitto.service siagamesin-worker.service
+
+[Service]
+User=yosua
+WorkingDirectory=/home/yosua/hackathon/siagamesin
+ExecStart=/home/yosua/hackathon/siagamesin/.venv/bin/python tools/sim.py --with-m1
+StandardOutput=null
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

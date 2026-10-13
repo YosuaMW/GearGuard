@@ -1,0 +1,15 @@
+[Unit]
+Description=SiagaMesin Telegram bot
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=yosua
+WorkingDirectory=/home/yosua/hackathon/siagamesin/backend
+ExecStart=/home/yosua/hackathon/siagamesin/.venv/bin/python -m app.bot
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
