@@ -8,6 +8,7 @@ import asyncpg
 from dotenv import load_dotenv, find_dotenv
 
 from app.anomaly import Scorer
+from app import db
 from app.notify import ask_reason, send_alert, send_resolved
 
 load_dotenv(find_dotenv())
@@ -176,7 +177,7 @@ async def handle(pool, data):
 
 
 async def main():
-    pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=3)
+    pool = await db.create_pool(max_size=3)
     await restore_state(pool)
     while True:
         try:

@@ -13,6 +13,7 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
 from app import ai  # noqa: E402  (setelah .env dimuat)
+from app import db  # noqa: E402
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
@@ -225,13 +226,16 @@ async def handle(pool, c, msg):
 
 
 async def main():
-    pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=4)
+    pool = await db.create_pool(max_size=4)
     offset = None
     async with httpx.AsyncClient(timeout=40) as c:
-        await c.post(f"{API}/setMyCommands", json={"commands": [
-            {"command": "status", "description": "Current condition of all machines"},
-            {"command": "help", "description": "How to use this bot"},
-        ]})
+        try:
+            await c.post(f"{API}/setMyCommands", json={"commands": [
+                {"command": "status", "description": "Current condition of all machines"},
+                {"command": "help", "description": "How to use this bot"},
+            ]})
+        except httpx.HTTPError as e:
+            print("Belum bisa set menu Telegram (internet belum siap?):", e)
         print(f"Bot siap menerima jawaban... (AI: {'MOCK' if ai.is_mock() else 'AMD'})")
         while True:
             try:

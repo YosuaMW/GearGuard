@@ -1,0 +1,67 @@
+# Jalankan seluruh SiagaMesin dengan satu perintah:  docker compose up -d --build
+# Butuh file .env (salin dari .env.example). DATABASE_URL & MQTT_HOST diatur otomatis di bawah.
+
+x-app: &app
+  build: .
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://siaga:${POSTGRES_PASSWORD:-siaga_local}@db:5432/siagamesin
+    MQTT_HOST: mqtt
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  depends_on:
+    db:
+      condition: service_healthy
+    mqtt:
+      condition: service_started
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: siaga
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-siaga_local}
+      POSTGRES_DB: siagamesin
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U siaga -d siagamesin"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    ports:
+      - "8000:8000"
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.worker"]
+
+  bot:
+    <<: *app
+    command: ["python", "-m", "app.bot"]
+    volumes:
+      - ./data:/app/data
+
+  sim:
+    <<: *app
+    profiles: ["sim"]
+    command: ["python", "/app/tools/sim.py", "--with-m1"]
+
+volumes:
+  dbdata:

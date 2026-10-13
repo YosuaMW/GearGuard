@@ -5,6 +5,7 @@ import asyncpg
 from dotenv import load_dotenv, find_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app import db
 
 load_dotenv(find_dotenv())
 
@@ -13,9 +14,7 @@ STATUSES = {"running", "anomaly", "stopped"}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.pool = await asyncpg.create_pool(
-        os.environ["DATABASE_URL"], min_size=1, max_size=5
-    )
+    app.state.pool = await db.create_pool(max_size=5)
     yield
     await app.state.pool.close()
 
