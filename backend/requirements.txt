@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+asyncpg
+aiomqtt
+httpx
+python-dotenv
