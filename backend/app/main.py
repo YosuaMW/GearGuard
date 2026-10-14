@@ -15,7 +15,7 @@ from app import db, labels  # noqa: E402
 STATUSES = {"running", "anomaly", "stopped"}
 STOP_A = float(os.getenv("STOP_CURRENT_A", "0.3"))
 SAMPLE_S = float(os.getenv("SAMPLE_SECONDS", "1"))
-Z_ALERT = 3.0
+Z_ALERT = float(os.getenv("ANOMALY_Z_ALERT", "3"))
 FEATURES = {
     "current_a": ("Current", "A"),
     "vib_rms": ("Vibration", "g RMS"),

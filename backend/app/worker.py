@@ -16,10 +16,17 @@ load_dotenv(find_dotenv())
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 STOP_A = float(os.getenv("STOP_CURRENT_A", "0.3"))
 STOP_SEC = int(os.getenv("STOP_SECONDS", "5"))
+GAP_S = int(os.getenv("DATA_GAP_SECONDS", "30"))   # data putus lebih lama dari ini = event ditutup
 NOTIFY_SOURCES = set(os.getenv("ALERT_NOTIFY_SOURCES", "live,replay").split(","))
 
 state = {}
-scorer = Scorer()
+last_ts = {}
+scorer = Scorer(
+    window=int(os.getenv("ANOMALY_WINDOW_S", "10")),
+    z_alert=float(os.getenv("ANOMALY_Z_ALERT", "3")),
+    z_clear=float(os.getenv("ANOMALY_Z_CLEAR", "2")),
+    confirm=int(os.getenv("ANOMALY_CONFIRM_S", "5")),
+)
 
 
 def parse_ts(s):
@@ -42,6 +49,8 @@ async def restore_state(pool):
             "UPDATE events SET end_ts = start_ts WHERE end_ts IS NULL AND NOT (id = ANY($1::int[]))", keep
         )
 
+        for r in await c.fetch("SELECT machine_id, last_seen FROM machines WHERE last_seen IS NOT NULL"):
+            last_ts[r["machine_id"]] = r["last_seen"]
         open_alerts = await c.fetch("SELECT DISTINCT machine_id FROM alerts WHERE resolved_ts IS NULL")
         for a in open_alerts:
             scorer.active[a["machine_id"]] = True
@@ -121,6 +130,16 @@ async def handle(pool, data):
 
         # --- deteksi berhenti / jalan ---
         st = state.setdefault(mid, {"low_since": None, "stopped": False, "event_id": None})
+        prev = last_ts.get(mid)
+        last_ts[mid] = ts
+        if prev and (ts - prev).total_seconds() > GAP_S:
+            # data sempat putus: tutup event/alert di waktu data terakhir, jangan dihitung berhenti selama putus
+            if st["stopped"]:
+                await c.execute("UPDATE events SET end_ts = $1 WHERE id = $2", prev, st["event_id"])
+                print(f"[DATA PUTUS] {mid} event {st['event_id']} ditutup di {prev:%H:%M:%S}")
+            st.update(low_since=None, stopped=False, event_id=None)
+            if scorer.reset(mid):
+                await c.execute("UPDATE alerts SET resolved_ts = $1 WHERE machine_id = $2 AND resolved_ts IS NULL", prev, mid)
         if cur < STOP_A:
             st["low_since"] = st["low_since"] or ts
             if not st["stopped"] and (ts - st["low_since"]).total_seconds() >= STOP_SEC:
