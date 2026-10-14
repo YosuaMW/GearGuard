@@ -67,7 +67,7 @@ Machines: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Comp
   }
 }]
 ```
-- `status`: `running` / `anomaly` / `stopped`. `online` = data received in the last 30 s (if `false`, show "Offline").
+- `status`: `running` / `anomaly` / `stopped`. A machine that sends no data for 30 s is reported as `stopped` (with `online: false` and `stopped_since` = time of its last data), so no extra "offline" state is needed.
 - `awaiting_reason`: the bot asked and the operator hasn't answered yet → "waiting for reply" marker.
 - `baseline.limit_high` = the level that triggers an alert (normal + 3 × spread). `null` until the baseline is computed.
 - `GET /machines/{id}` = one machine, same shape.

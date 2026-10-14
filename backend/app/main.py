@@ -110,6 +110,8 @@ async def machines():
         status = r["status"] if r["status"] in STATUSES else "stopped"
         open_event = r["start_ts"] is not None and r["end_ts"] is None
         online = r["ts"] is not None and (now - r["ts"]).total_seconds() <= 30
+        if not online:
+            status = "stopped"   # tidak ada data > 30 detik = dianggap berhenti
         result.append({
             "id": r["machine_id"],
             "name": r["name"],
@@ -118,7 +120,7 @@ async def machines():
             "online": online,
             "anomaly_score": rnd(r["anomaly_score"]),
             "awaiting_reason": r["tg_message_id"] is not None and r["category"] is None,
-            "stopped_since": r["start_ts"] if status == "stopped" and open_event else None,
+            "stopped_since": (r["start_ts"] if open_event else r["ts"]) if status == "stopped" else None,
             "last": {
                 "machine_id": r["machine_id"],
                 "ts": r["ts"],

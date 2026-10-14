@@ -61,7 +61,7 @@ services:
   sim:
     <<: *app
     profiles: ["sim"]
-    command: ["python", "/app/tools/sim.py", "--with-m1"]
+    command: ["python", "/app/tools/sim.py", "--quiet"]
 
 volumes:
   dbdata:

@@ -40,7 +40,8 @@ SiagaMesin/
 ├── db/init.sql           # full schema (runs automatically when the DB is first created)
 ├── deploy/               # mosquitto config (+ old systemd files, unused)
 ├── tools/
-│   ├── sim.py            # 4-machine simulator
+│   ├── sim.py            # simulator for m2–m4 (MQTT commands: wear / stop / calm)
+│   ├── metrics.py        # numbers for the pitch slides
 │   └── baseline.py       # computes each machine's normal condition
 └── data/voice/           # operator voice notes, NOT committed
 ```
@@ -131,7 +132,21 @@ The **simulator** doesn't start on its own (profile `sim`). If it is running whe
 
 **Quiet Telegram while the simulator runs:** add `ALERT_NOTIFY_SOURCES=live` to `.env` and run `docker compose up -d`. Early warnings for replay machines (m2–m4) then stay on the dashboard only.
 
-**Simulated `m1`:** until the real rig exists, the simulator also simulates `m1` (`--with-m1` in `docker-compose.yml`). Once the ESP32 is connected, remove `"--with-m1"` from the `sim` service `command` line, then run `docker compose --profile sim up -d sim`.
+**Simulator commands** (no restart needed), sent with `docker compose exec mqtt mosquitto_pub -t siagamesin/sim/cmd -m "<command>"`:
+
+| Command | Effect |
+|---|---|
+| `calm` | No random events, every machine runs normally |
+| `random` | Random stops and bearing wear again |
+| `wear m2 [s]` | Pump starts bearing wear now → early warning → stops after `s` seconds (default 90) |
+| `stop m4 40 material` | Compressor stops for 40 s; reasons: `material`, `setup`, `break`, `electrical`, `overheat`, `other` |
+| `status` | Prints every machine's phase (`docker compose logs sim --tail 1`) |
+
+**`m1` = live ESP32 rig.** The simulator only covers m2–m4. While the rig is unplugged, `m1` shows as `stopped` with `online: false`. To simulate `m1` again (no rig available), add `"--with-m1"` back to the `sim` service `command` in `docker-compose.yml` and run `docker compose --profile sim up -d sim`.
+
+**Connecting the ESP32:** it must be on the same Wi-Fi as the Pi and publish to `yosua.local:1883`. Watch it arrive with `docker compose exec mqtt mosquitto_sub -t "siagamesin/m1/#" -v`. Details: [role1-hardware.md](role1-hardware.md).
+
+**Pitch numbers:** `docker compose exec worker python /app/tools/metrics.py --hours 24` (add `--live-only` for the real rig only).
 
 ## C. Health checks
 
@@ -205,6 +220,5 @@ If the AMD endpoint errors or is down, classification falls back to keywords so 
 - [ ] Connect real `/transcribe` + `/classify` (role 3), then `/explain`
 - [ ] Live `m1` from the ESP32 rig + recompute baseline (role 1)
 - [ ] Add the Vercel URL to `CORS_ORIGINS` (role 4)
-- [ ] Simulator option to trigger bearing wear on demand (for the demo video)
-- [ ] Measure pitch numbers (lead time, stops logged)
+- [ ] Measure pitch numbers with `tools/metrics.py` once there is enough data
 - [ ] Friday: keep the simulator running · Saturday: clear test data before recording

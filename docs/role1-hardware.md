@@ -41,7 +41,39 @@ How to connect the ESP32 and sensors to the SiagaMesin backend on the Raspberry 
 
 Need extra features for the model (e.g. `vib_peak`, FFT bands)? Add the fields to the JSON and tell Yosua so database columns can be added.
 
-## 3. ESP32 example (Arduino)
+## 3. Connecting the ESP32 to the backend
+
+```
+ESP32 (sensors) ──Wi-Fi──► MQTT broker on the Pi (yosua.local:1883)
+                                 │
+                            worker → database → API / dashboard / Telegram bot
+```
+
+The ESP32 only needs to join the **same Wi-Fi as the Pi** and publish one JSON message per second to `siagamesin/m1/telemetry`. Everything after that (storing, stop detection, anomaly detection, Telegram questions, dashboard) is handled by the backend.
+
+**Recommended wiring (ESP32 DevKit V1)**
+
+| Sensor | Pins | Notes |
+|---|---|---|
+| PZEM-004T v3 (current) | TX → GPIO16 (RX2), RX → GPIO17 (TX2), 5 V → VIN, GND | CT clamp around **one** wire (live) of the fan's power cable; 220 V wiring stays inside the closed box with the MCB |
+| MPU6050 (vibration) | SDA → GPIO21, SCL → GPIO22, VCC → 3V3, GND | Mount it firmly on the motor body (bolt or strong double tape) |
+| DS18B20 (temperature) | DATA → GPIO4 + 4.7 kΩ pull-up to 3V3, VCC → 3V3, GND | Taped to the motor housing |
+
+Arduino libraries: `PubSubClient`, `PZEM004Tv30`, `Adafruit MPU6050` (+ `Adafruit Unified Sensor`), `OneWire`, `DallasTemperature`. `WiFi` and `ESPmDNS` are built into the ESP32 core. Board: **ESP32 Dev Module**.
+
+**Vibration RMS:** sample the accelerometer ~400 times over 1 second, subtract the average of each axis (removes gravity and offset), take the RMS of what remains, and convert m/s² to g (÷ 9.80665). Send that single number as `vib_rms`.
+
+**Connection checklist**
+1. On the Pi, watch incoming MQTT: `docker compose exec mqtt mosquitto_sub -t "siagamesin/#" -v`
+2. First flash a sketch that sends **fixed fake values** (the minimal example in 3b with constants instead of sensor reads). The Serial Monitor (115200) should show Wi-Fi connected, the broker IP found, MQTT connected, then one message per second.
+3. The Pi terminal from step 1 shows `siagamesin/m1/telemetry {...}` every second.
+4. `/status` on Telegram or `GET /machines` shows **Conveyor motor** running and online.
+5. Switch to real sensor reads. Every message should contain all three fields. If a sensor fails, **leave its field out** rather than sending 0; a missing or zero current is read as "stopped".
+6. Run the rig normally for 15–30 min, then recompute the baseline (section 4).
+
+**If the ESP32 can't find the broker:** it can't resolve `yosua.local` on that network. Use the Pi's IP instead (`hostname -I` on the Pi) and remember it changes if the Pi moves to another Wi-Fi.
+
+## 3b. Minimal ESP32 example (Arduino)
 
 Libraries: `PubSubClient`, `ESPmDNS` (built into the ESP32 core).
 

@@ -48,6 +48,16 @@ docker compose --profile sim up -d sim     # optional: replay machine simulator
 ```
 Full details: [docs/raspi-setup.md](docs/raspi-setup.md). API docs (Swagger): `http://localhost:8000/docs`.
 
+## Connecting the hardware
+
+The ESP32 on the live rig joins the **same Wi-Fi as the Raspberry Pi** and publishes one JSON message per second to MQTT topic `siagamesin/m1/telemetry` on `yosua.local:1883`:
+
+```json
+{"machine_id": "m1", "current_a": 1.8, "vib_rms": 0.42, "temp_c": 41.5}
+```
+
+The backend stores it, detects stops and anomalies, asks the operator on Telegram and serves it to the dashboard. While the rig runs, the simulator only covers m2–m4. Wiring, message format and a test checklist: [docs/role1-hardware.md](docs/role1-hardware.md).
+
 ## Repo rules
 
 - **Never commit `.env`**, bot tokens, database passwords or API keys. Use `.env.example`.
