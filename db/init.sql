@@ -51,10 +51,10 @@ CREATE TABLE IF NOT EXISTS baselines (
 );
 
 INSERT INTO machines (machine_id, name, source) VALUES
-  ('m1', 'Motor Demo 1', 'live'),
-  ('m2', 'Mixer Motor',  'replay'),
-  ('m3', 'Water Pump',   'replay'),
-  ('m4', 'Conveyor B',   'replay')
+  ('m1', 'Conveyor motor', 'live'),
+  ('m2', 'Pump',  'replay'),
+  ('m3', 'Mixer',   'replay'),
+  ('m4', 'Compressor',   'replay')
 ON CONFLICT (machine_id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS ai_calls (

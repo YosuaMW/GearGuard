@@ -8,11 +8,11 @@ from datetime import datetime, timezone
 import aiomqtt
 
 REPLAY = {
-    "m2": {"name": "Mixer Motor", "cur": 2.4, "vib": 0.35, "temp": 45},
-    "m3": {"name": "Water Pump", "cur": 3.1, "vib": 0.28, "temp": 48},
-    "m4": {"name": "Conveyor B", "cur": 1.6, "vib": 0.40, "temp": 40},
+    "m2": {"name": "Pump", "cur": 2.4, "vib": 0.35, "temp": 45},
+    "m3": {"name": "Mixer", "cur": 3.1, "vib": 0.28, "temp": 48},
+    "m4": {"name": "Compressor", "cur": 1.6, "vib": 0.40, "temp": 40},
 }
-LIVE_STANDIN = {"m1": {"name": "Motor Demo 1", "cur": 1.8, "vib": 0.42, "temp": 41}}
+LIVE_STANDIN = {"m1": {"name": "Conveyor motor", "cur": 1.8, "vib": 0.42, "temp": 41}}
 
 REASONS = [
     ("Ganti produk/setup", "ganti mold untuk produk B"),

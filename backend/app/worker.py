@@ -151,7 +151,7 @@ async def handle(pool, data):
                 if r["started"]:
                     aid = await c.fetchval(
                         "INSERT INTO alerts (machine_id, ts, score, features) VALUES ($1,$2,$3,$4) RETURNING id",
-                        mid, ts, score, json.dumps(r["z"]),
+                        mid, ts, score, json.dumps({f: {"now": r["mean"][f], "normal": r["base"][f]["median"], "z": r["z"][f]} for f in r["z"]}),
                     )
                     print(f"[ANOMALI] {mid} alert {aid}, z={r['z']}")
                     await notify_alert(c, mid, source, aid, ts, r)
@@ -159,7 +159,7 @@ async def handle(pool, data):
                     await c.execute(
                         """UPDATE alerts SET score = GREATEST(score, $1), features = $2
                            WHERE machine_id = $3 AND resolved_ts IS NULL""",
-                        score, json.dumps(r["z"]), mid,
+                        score, json.dumps({f: {"now": r["mean"][f], "normal": r["base"][f]["median"], "z": r["z"][f]} for f in r["z"]}), mid,
                     )
                 elif r["ended"]:
                     ids = await close_alerts(c, mid, ts)

@@ -14,6 +14,7 @@ load_dotenv(find_dotenv())
 
 from app import ai  # noqa: E402  (setelah .env dimuat)
 from app import db  # noqa: E402
+from app import labels  # noqa: E402
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
@@ -152,11 +153,11 @@ def result_text(ev_id, transcript, cls, review):
         lines.append(f"📝 <i>{html.escape(transcript)}</i>")
     if review:
         lines.append(
-            f"⚠️ Category unclear (best guess: {html.escape(cls['category'])}, {cls['confidence']:.0%}). "
+            f"⚠️ Category unclear (best guess: {html.escape(labels.label(cls['category']))}, {cls['confidence']:.0%}). "
             "Marked <b>Needs review</b> on the dashboard."
         )
     else:
-        lines.append(f"Category: <b>{html.escape(cls['category'])}</b> ({cls['confidence']:.0%})")
+        lines.append(f"Category: <b>{html.escape(labels.label(cls['category']))}</b> ({cls['confidence']:.0%})")
     if cls["source"] != "amd":
         lines.append("<i>(AI offline: keyword classifier used)</i>" if not ai.is_mock() else "<i>(AI mock mode)</i>")
     return "\n".join(lines)
