@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+
+/*
+  Design rule (ISA-101 high-performance HMI): the plant is grey when things are
+  normal. Colour is reserved for abnormal states so problems are seen first.
+*/
+@theme {
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+
+  --color-paper: #edf0f2; /* page */
+  --color-panel: #ffffff; /* surfaces */
+  --color-ink: #17202b; /* primary text */
+  --color-ink-2: #5b6672; /* secondary text */
+  --color-ink-3: #8a939d; /* hints, normal-state graphics */
+  --color-rule: #d5dae0; /* borders */
+
+  --color-run: #2e8b57; /* small "running" indicator only */
+  --color-warn: #b8770a;
+  --color-warn-tint: #fbf1dd;
+  --color-alarm: #c0392b;
+  --color-alarm-tint: #fbe7e4;
+  --color-steel: #2f5d8c; /* navigation and selection */
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1; /* numbers don't jitter when they update */
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-steel);
+  outline-offset: 2px;
+}
+
+/* The one attention animation: an unacknowledged alarm breathes. */
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(192 57 43 / 0.35); }
+  50% { box-shadow: 0 0 0 6px rgb(192 57 43 / 0); }
+}
+.alarm-breathe { animation: breathe 1.8s ease-in-out infinite; }
+
+@keyframes breathe-warn {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(184 119 10 / 0.35); }
+  50% { box-shadow: 0 0 0 6px rgb(184 119 10 / 0); }
+}
+.warn-breathe { animation: breathe-warn 1.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .alarm-breathe, .warn-breathe { animation: none; }
+  * { transition: none !important; }
+}
