@@ -1,25 +1,25 @@
-# Peran 4 · Frontend Dashboard
+# Role 4 · Frontend Dashboard
 
-> Yang perlu disepakati: lihat [checklist-integrasi.md](checklist-integrasi.md) poin 3.
+> To agree on: see [integration-checklist.md](integration-checklist.md) item 3.
 
-## Alamat API
+## API address
 
-| Kondisi | Base URL |
+| Where | Base URL |
 |---|---|
-| Dari mana saja (HTTPS) | `https://yosua.tailf140ab.ts.net` |
-| Satu WiFi dengan Raspi | `http://yosua.local:8000` |
+| Anywhere (HTTPS) | `https://yosua.tailf140ab.ts.net` |
+| Same Wi-Fi as the Pi | `http://yosua.local:8000` |
 
-Swagger (coba semua endpoint): `<base URL>/docs`. Simpan base URL di env (mis. `NEXT_PUBLIC_API_URL`).
-CORS: `http://localhost:3000` sudah diizinkan. **Kirim URL Vercel** supaya ditambahkan. Semua endpoint **GET**.
+Swagger (try every endpoint): `<base URL>/docs`. Keep the base URL in an env var (e.g. `NEXT_PUBLIC_API_URL`).
+CORS: `http://localhost:3000` is allowed. **Send the Vercel URL** so it can be added. Every endpoint is **GET**.
 
-## Aturan umum
+## General rules
 
-- Waktu: ISO 8601 dengan zona (UTC). Tampilkan dalam WIB di UI.
-- `anomaly_score` dan `score` skala **0–1** (UI menampilkan ×100, mis. 0.63 → "63 / 100").
-- `availability` skala **0–1** (0.957 → "95.7%").
-- Kategori dikirim dua bentuk: `category` = label tampilan (bahasa Inggris, langsung tampilkan) dan `category_id` = id stabil untuk warna/ikon.
-- Parameter `range`: `shift` (default untuk laporan) · `today` (default untuk daftar) · `1h` · `8h` · `24h`. Shift: 06–14, 14–22, 22–06 WIB.
-- Angka sensor/skor bisa `null` (mesin belum kirim data / baseline belum dihitung).
+- Times: ISO 8601 with offset (UTC). Show them in WIB in the UI.
+- `anomaly_score` and `score` are on a **0–1** scale (the UI shows ×100, e.g. 0.63 → "63 / 100").
+- `availability` is on a **0–1** scale (0.957 → "95.7%").
+- Categories come in two forms: `category` = display label (English, show as-is) and `category_id` = stable id for colours/icons.
+- `range` parameter: `shift` (default for reports) · `today` (default for lists) · `1h` · `8h` · `24h`. Shifts: 06–14, 14–22, 22–06 WIB.
+- Sensor values and scores can be `null` (machine hasn't sent data yet / baseline not computed yet).
 
 | `category_id` | `category` |
 |---|---|
@@ -28,22 +28,22 @@ CORS: `http://localhost:3000` sudah diizinkan. **Kirim URL Vercel** supaya ditam
 | `electrical` | Breakdown – Electrical |
 | `overheat` | Breakdown – Overheat |
 | `changeover` | Changeover / setup |
-| `break` | Break / scheduled (tidak mengurangi availability) |
+| `break` | Break / scheduled (does not reduce availability) |
 | `other` | Other |
-| `review` | Needs review (confidence AI < 0.6) |
+| `review` | Needs review (AI confidence < 0.6) |
 
-Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compressor (replay).
+Machines: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compressor (replay).
 
-## Peta halaman → endpoint
+## Dashboard page → endpoint map
 
-| Bagian dashboard | Endpoint | Polling |
+| Dashboard section | Endpoint | Polling |
 |---|---|---|
-| Overview: diagram line + kartu mesin | `/machines` | 1 s |
+| Overview: line diagram + machine cards | `/machines` | 1 s |
 | Overview: KPI (availability, downtime, active alerts, stops without reason) + badge "Simulated data" | `/summary` | 5 s |
-| Kartu mesin "Vibration, last 2 min" & grafik di halaman Machines | `/telemetry?minutes=2` | 2–5 s |
-| Garis "Alert limit" di grafik | `baseline.<sensor>.limit_high` dari `/machines` | ikut `/machines` |
-| Predictive alerts / kotak alert di Machines | `/alerts?active=true` | 2 s |
-| Today on the line / Stops and operator answers | `/events` (+ `/alerts` untuk "anomaly alert raised") | 2 s |
+| Machine card "Vibration, last 2 min" & Machines page charts | `/telemetry?minutes=2` | 2–5 s |
+| "Alert limit" line on charts | `baseline.<sensor>.limit_high` from `/machines` | with `/machines` |
+| Predictive alerts / alert box on Machines | `/alerts?active=true` | 2 s |
+| Today on the line / Stops and operator answers | `/events` (+ `/alerts` for "anomaly alert raised") | 2 s |
 | Reports: Where the time went | `/pareto` | 10 s |
 | Reports: Availability by machine | `/availability` | 10 s |
 | Running on AMD | `/ai-usage` | 10 s |
@@ -67,10 +67,10 @@ Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compres
   }
 }]
 ```
-- `status`: `running` / `anomaly` / `stopped`. `online` = ada data ≤ 30 detik terakhir (kalau `false`, tampilkan "Offline").
-- `awaiting_reason`: bot sudah bertanya, operator belum menjawab → tanda "waiting for reply".
-- `baseline.limit_high` = batas yang memicu alert (normal + 3 × sebaran). `null` kalau baseline belum dihitung.
-- `GET /machines/{id}` = satu mesin dengan bentuk sama.
+- `status`: `running` / `anomaly` / `stopped`. `online` = data received in the last 30 s (if `false`, show "Offline").
+- `awaiting_reason`: the bot asked and the operator hasn't answered yet → "waiting for reply" marker.
+- `baseline.limit_high` = the level that triggers an alert (normal + 3 × spread). `null` until the baseline is computed.
+- `GET /machines/{id}` = one machine, same shape.
 
 ## `GET /telemetry?minutes=2&machine_id=m2`
 
@@ -78,7 +78,7 @@ Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compres
 {"bucket_seconds": 1.0,
  "series": {"m2": [{"ts": "2026-10-14T12:05:03+00:00", "current_a": 2.31, "vib_rms": 0.401, "temp_c": 45.7}]}}
 ```
-- Tanpa `machine_id` → semua mesin. `minutes` 0–60. Maksimal ±120 titik per mesin (dirata-rata per `bucket_seconds`).
+- Without `machine_id` → all machines. `minutes` 0–60. At most ~120 points per machine (averaged per `bucket_seconds`).
 
 ## `GET /summary?range=shift`
 
@@ -88,8 +88,8 @@ Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compres
  "active_alerts": 0, "stops_without_reason": 1,
  "data_mode": "replay", "ai_mode": "mock"}
 ```
-- `data_mode`: `live` (ada mesin live online) · `replay` (hanya simulator) · `offline`. Untuk badge "Simulated data".
-- `ai_mode`: `mock` (AMD belum tersambung) atau `amd`.
+- `data_mode`: `live` (a live machine is online) · `replay` (simulator only) · `offline`. Drives the "Simulated data" badge.
+- `ai_mode`: `mock` (AMD not connected yet) or `amd`.
 
 ## `GET /events?range=today&machine_id=m1&limit=50`
 
@@ -102,9 +102,9 @@ Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compres
   "answer_type": "voice", "transcript": "bahan dari gudang belum datang"
 }]
 ```
-- Urut terbaru dulu. `ongoing: true` = mesin masih berhenti.
-- `answer_type`: `voice` / `text` (operator) · `replay` (alasan dari simulator) · `null` (belum ada jawaban).
-- Satu event bisa ditampilkan sebagai dua baris timeline: "stopped for 18 min" (`start_ts`, `duration_s`) dan "reason: …" (`category`, `transcript`).
+- Newest first. `ongoing: true` = the machine is still stopped.
+- `answer_type`: `voice` / `text` (operator) · `replay` (reason from the simulator) · `null` (no answer yet).
+- One event can be shown as two timeline rows: "stopped for 18 min" (`start_ts`, `duration_s`) and "reason: …" (`category`, `transcript`).
 
 ## `GET /alerts?active=true&machine_id=m2&range=today`
 
@@ -122,9 +122,9 @@ Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compres
   }
 }]
 ```
-- `active=true` → hanya yang masih aktif (tanpa batas waktu). Default: aktif + yang terjadi dalam `range`.
-- `explanation_source`: `rules` (sekarang) → `ai` setelah `/explain` dari peran 3 tersambung. Saat itu `sources` berisi `[{"title": "Centrifugal pump manual", "page": 42, "snippet": "..."}]` untuk baris "Check: …".
-- Alert lama bisa punya `now`/`normal`/`pct` = `null`.
+- `active=true` → only alerts still active (no time limit). Default: active ones + any raised within `range`.
+- `explanation_source`: `rules` (now) → `ai` once role 3's `/explain` is connected. Then `sources` contains `[{"title": "Centrifugal pump manual", "page": 42, "snippet": "..."}]` for the "Check: …" line.
+- Older alerts may have `now`/`normal`/`pct` = `null`.
 
 ## `GET /pareto?range=shift&machine_id=`
 
@@ -134,7 +134,7 @@ Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compres
    {"category_id": "material", "category": "Waiting for material", "minutes": 39.0, "stops": 3, "pct": 43.3, "cumulative_pct": 43.3}
  ]}
 ```
-- Sudah urut terbesar. `unexplained_minutes` = berhenti yang belum ada alasannya (tidak masuk `categories`).
+- Already sorted largest first. `unexplained_minutes` = stops with no reason yet (not included in `categories`).
 
 ## `GET /availability?range=shift`
 
@@ -143,7 +143,7 @@ Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compres
  "machines": [{"machine_id": "m1", "machine_name": "Conveyor motor", "availability": 0.95,
                "run_minutes": 412.0, "downtime_minutes": 21.5, "planned_stop_minutes": 15.0}]}
 ```
-- Availability = waktu jalan ÷ (waktu jalan + berhenti tak terencana). Waktu offline dan istirahat terjadwal tidak dihitung.
+- Availability = run time ÷ (run time + unplanned stops). Offline time and scheduled breaks are excluded.
 
 ## `GET /ai-usage`
 
@@ -153,4 +153,4 @@ Mesin: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Compres
                 "calls_today": 12, "success_rate": 1.0, "avg_latency_ms": 820,
                 "prompt_tokens": null, "completion_tokens": null, "mock": false, "last_call": "..."}]}
 ```
-- Selalu 3 baris: `/transcribe`, `/classify`, `/explain`. Selama `mode = mock`, `model` berisi `mock` / `keyword-rules`; tampilkan "To be confirmed by role 3" kalau `mock = true` atau `calls_today = 0`.
+- Always 3 rows: `/transcribe`, `/classify`, `/explain`. While `mode = mock`, `model` is `mock` / `keyword-rules`; show "To be confirmed by role 3" when `mock = true` or `calls_today = 0`.

@@ -1,64 +1,65 @@
-# Raspberry Pi · Setup & Operasional Backend
+# Raspberry Pi · Backend Setup & Operations
 
-Panduan untuk peran 2 (dan cadangannya, peran 4) menyiapkan dan menjalankan backend SiagaMesin.
-Sistem berjalan dengan **Docker Compose**, jadi cara yang sama juga bisa dipakai di laptop atau VPS.
+Guide for role 2 (and their backup, role 4) to set up and run the SiagaMesin backend.
+Everything runs with **Docker Compose**, so the same steps also work on a laptop or VPS.
 
-## Ringkasan sistem
+## System overview
 
-| Komponen | Jalan sebagai | Port | Akses |
+| Component | Runs as | Port | Reachable from |
 |---|---|---|---|
-| `db` PostgreSQL 17 | container | – | hanya di dalam Docker |
-| `mqtt` Mosquitto | container | 1883 | jaringan lokal (ESP32) |
-| `api` FastAPI | container | 8000 | lokal + Tailscale Funnel |
+| `db` PostgreSQL 17 | container | – | inside Docker only |
+| `mqtt` Mosquitto | container | 1883 | local network (ESP32) |
+| `api` FastAPI | container | 8000 | local + Tailscale Funnel |
 | `worker` | container | – | – |
 | `bot` Telegram | container | – | – |
-| `sim` simulator | container (**opsional**, profile `sim`) | – | – |
-| Tailscale Funnel | service sistem | 443 → 8000 | internet (HTTPS) |
+| `sim` simulator | container (**optional**, profile `sim`) | – | – |
+| Tailscale Funnel | system service | 443 → 8000 | internet (HTTPS) |
 
-Semua container memakai `restart: unless-stopped`: otomatis menyala saat Raspi boot dan restart sendiri kalau crash.
-Perangkat: Raspberry Pi 4B 4 GB, Debian 13 (trixie) 64-bit, hostname `yosua`.
+All containers use `restart: unless-stopped`: they start on boot and restart themselves if they crash.
+Hardware: Raspberry Pi 4B 4 GB, Debian 13 (trixie) 64-bit, hostname `yosua`.
 
-## Struktur folder
+## Folder layout
 
 ```
 SiagaMesin/
-├── .env                  # rahasia, TIDAK masuk repo (salin dari .env.example)
+├── .env                  # secrets, NOT committed (copy from .env.example)
 ├── .env.example
-├── Dockerfile            # satu image Python untuk api, worker, bot, sim
+├── Dockerfile            # one Python image for api, worker, bot, sim
 ├── docker-compose.yml
 ├── backend/
 │   ├── requirements.txt
 │   └── app/
-│       ├── main.py       # API: /health, /machines
-│       ├── worker.py     # MQTT → DB, deteksi berhenti & anomali
-│       ├── anomaly.py    # skor anomali z-score
-│       ├── notify.py     # pesan Telegram (pertanyaan, peringatan dini)
-│       ├── bot.py        # jawaban operator, /status
-│       ├── ai.py         # klien AMD /transcribe, /classify (+ mode mock)
-│       └── db.py         # koneksi database yang menunggu DB siap
-├── db/init.sql           # skema database lengkap (dijalankan otomatis saat DB pertama dibuat)
-├── deploy/               # config mosquitto (+ file systemd lama, tidak dipakai)
+│       ├── main.py       # API: /machines, /telemetry, /summary, /events, /alerts, /pareto, /availability, /ai-usage
+│       ├── labels.py     # English category labels, shift / time-range helpers
+│       ├── worker.py     # MQTT → DB, stop & anomaly detection
+│       ├── anomaly.py    # z-score anomaly scoring
+│       ├── notify.py     # Telegram messages (stop questions, early warnings)
+│       ├── bot.py        # operator answers, /status
+│       ├── ai.py         # AMD client for /transcribe, /classify (+ mock mode)
+│       └── db.py         # database connection that waits for the DB to be ready
+├── db/init.sql           # full schema (runs automatically when the DB is first created)
+├── deploy/               # mosquitto config (+ old systemd files, unused)
 ├── tools/
-│   ├── sim.py            # simulator 4 mesin
-│   └── baseline.py       # hitung kondisi normal tiap mesin
-└── data/voice/           # voice note operator, TIDAK masuk repo
+│   ├── sim.py            # 4-machine simulator
+│   └── baseline.py       # computes each machine's normal condition
+└── data/voice/           # operator voice notes, NOT committed
 ```
 
 ---
 
-## A. Setup dari nol
+## A. Setup from scratch
 
-Semua perintah dijalankan di Raspi lewat SSH: `ssh yosua@yosua.local`.
+Run everything on the Pi over SSH: `ssh yosua@yosua.local`.
 
 ### 1. Docker
 ```
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
-exit                       # logout, lalu SSH lagi supaya grup docker aktif
+exit                       # log out, then SSH in again so the docker group applies
 docker run --rm hello-world
 ```
 
-### 2. Kode
+### 2. Code
 ```
 mkdir -p ~/hackathon && cd ~/hackathon
 git clone git@github.com:YosuaMW/SiagaMesin.git siagamesin
@@ -67,139 +68,143 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-### 3. Bot Telegram
-1. Telegram → **@BotFather** (centang biru) → `/newbot` → simpan token.
-2. Isi token ke `.env` tanpa menampilkannya di layar:
+### 3. Telegram bot
+1. Telegram → **@BotFather** (blue check) → `/newbot` → keep the token.
+2. Put the token in `.env` without showing it on screen:
    ```
    read -s -p "Paste token: " T && sed -i "s|^TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=$T|" .env && unset T && echo
    ```
-3. Kirim `/start` ke bot, lalu ambil chat ID:
+3. Send `/start` to the bot, then get the chat ID:
    ```
    T=$(grep ^TELEGRAM_BOT_TOKEN= .env | cut -d= -f2)
    curl -s "https://api.telegram.org/bot$T/getUpdates" | grep -o '"chat":{"id":-\?[0-9]*'; unset T
    ```
-4. Isi `TELEGRAM_CHAT_ID=` di `.env` dengan angka tadi (`nano .env`).
+4. Set `TELEGRAM_CHAT_ID=` in `.env` to that number (`nano .env`).
 
-**Token jangan pernah di-screenshot atau dikirim ke grup.** Kalau bocor: BotFather → `/revoke`.
+**Never screenshot the token or post it in a group.** If it leaks: BotFather → `/revoke`.
 
-### 4. Jalankan
+### 4. Start
 ```
 docker compose up -d --build
 docker compose ps
 ```
-Build pertama ±2–10 menit. Lima service (`db`, `mqtt`, `api`, `worker`, `bot`) harus **Up**.
+The first build takes ~2–10 minutes. Five services (`db`, `mqtt`, `api`, `worker`, `bot`) should be **Up**.
 
-### 5. Tailscale Funnel (HTTPS publik)
+### 5. Tailscale Funnel (public HTTPS)
 ```
 curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up                    # buka link yang muncul, login, klik Connect
-sudo tailscale funnel --bg 8000      # kalau diminta, buka link /f/funnel lalu Enable
+sudo tailscale up                    # open the link shown, log in, click Connect
+sudo tailscale funnel --bg 8000      # if asked, open the /f/funnel link and click Enable
 ```
-Alamat publik saat ini: `https://yosua.tailf140ab.ts.net`
-Di console Tailscale → Machines → **⋯** pada `yosua` → **Disable key expiry**.
+Current public address: `https://yosua.tailf140ab.ts.net`
+In the Tailscale console → Machines → **⋯** on `yosua` → **Disable key expiry**.
 
-### 6. Baseline kondisi normal
-Nyalakan simulator (atau rig asli), tunggu minimal 5 menit, lalu:
+### 6. Normal-condition baseline
+Start the simulator (or the real rig), wait at least 5 minutes, then:
 ```
 docker compose --profile sim up -d sim
 docker compose exec worker python /app/tools/baseline.py --minutes 30
 ```
-Ulangi setelah rig asli terpasang dan berjalan normal 15–30 menit.
+Repeat once the real rig is connected and has run normally for 15–30 minutes.
 
 ---
 
-## B. Perintah sehari-hari
+## B. Daily commands
 
-Semua dari folder `~/hackathon/siagamesin`.
+All from `~/hackathon/siagamesin`.
 
-| Tujuan | Perintah |
+| Goal | Command |
 |---|---|
-| Status semua | `docker compose ps` |
-| Log live worker | `docker compose logs -f worker` (keluar `Ctrl+C`, container tetap jalan) |
-| Log terakhir bot | `docker compose logs bot --tail 50` |
-| **Terapkan perubahan kode** | `docker compose up -d --build` |
-| Nyalakan simulator | `docker compose --profile sim up -d sim` |
-| Matikan simulator | `docker compose --profile sim stop sim` |
-| Hitung ulang baseline | `docker compose exec worker python /app/tools/baseline.py --minutes 30` |
-| Masuk database | `docker compose exec db psql -U siaga -d siagamesin` |
-| Matikan semua | `docker compose down` (data database tetap aman di volume) |
-| Nyalakan semua | `docker compose up -d` |
+| Status of everything | `docker compose ps` |
+| Live worker log | `docker compose logs -f worker` (exit with `Ctrl+C`, the container keeps running) |
+| Recent bot log | `docker compose logs bot --tail 50` |
+| **Apply code changes** | `docker compose up -d --build` |
+| Start the simulator | `docker compose --profile sim up -d sim` |
+| Stop the simulator | `docker compose --profile sim stop sim` |
+| Recompute baseline | `docker compose exec worker python /app/tools/baseline.py --minutes 30` |
+| Open the database | `docker compose exec db psql -U siaga -d siagamesin` |
+| Stop everything | `docker compose down` (database data stays in the volume) |
+| Start everything | `docker compose up -d` |
 
-**Simulator** tidak menyala otomatis (profile `sim`). Kalau sedang jalan lalu Raspi restart, simulator ikut menyala lagi.
-**Mulai Jumat (deploy) sampai penilaian selesai, simulator harus menyala**, supaya dashboard tidak kosong saat juri membuka.
+The **simulator** doesn't start on its own (profile `sim`). If it is running when the Pi restarts, it comes back too.
+**From Friday (deploy) until judging ends, the simulator must be running**, so the dashboard isn't empty when judges open it.
 
-**Simulator `m1`:** selama rig asli belum ada, simulator ikut mensimulasikan `m1` (`--with-m1` di `docker-compose.yml`). Setelah ESP32 tersambung, hapus `"--with-m1"` dari baris `command` service `sim`, lalu `docker compose --profile sim up -d sim`.
+**Quiet Telegram while the simulator runs:** add `ALERT_NOTIFY_SOURCES=live` to `.env` and run `docker compose up -d`. Early warnings for replay machines (m2–m4) then stay on the dashboard only.
 
-## C. Cek kesehatan
+**Simulated `m1`:** until the real rig exists, the simulator also simulates `m1` (`--with-m1` in `docker-compose.yml`). Once the ESP32 is connected, remove `"--with-m1"` from the `sim` service `command` line, then run `docker compose --profile sim up -d sim`.
 
-| Cek | Perintah / alamat | Hasil benar |
+## C. Health checks
+
+| Check | Command / address | Expected |
 |---|---|---|
-| API lokal | `curl -s localhost:8000/health` | `"status":"ok"` |
-| API publik | `https://yosua.tailf140ab.ts.net/health` | `"status":"ok"` |
-| Container | `docker compose ps` | Semua **Up**, `db` **healthy** |
-| MQTT masuk | `docker compose exec mqtt mosquitto_sub -t "siagamesin/#" -v` | Pesan tiap detik |
-| Bot | ketik `/status` di Telegram | Kondisi semua mesin |
-| Tailscale | `tailscale funnel status` | proxy ke `127.0.0.1:8000` |
+| Local API | `curl -s localhost:8000/health` | `"status":"ok"` |
+| Public API | `https://yosua.tailf140ab.ts.net/health` | `"status":"ok"` |
+| All endpoints | `https://yosua.tailf140ab.ts.net/docs` | Swagger lists every endpoint |
+| Containers | `docker compose ps` | All **Up**, `db` **healthy** |
+| MQTT traffic | `docker compose exec mqtt mosquitto_sub -t "siagamesin/#" -v` | A message every second |
+| Bot | send `/status` on Telegram | All machines listed |
+| Tailscale | `tailscale funnel status` | proxy to `127.0.0.1:8000` |
 | Auto-start | `systemctl is-enabled docker tailscaled` | `enabled` ×2 |
 
-**Pantau database live:**
+**Watch the database live:**
 ```
-watch -n 2 'docker compose exec -T db psql -U siaga -d siagamesin -c "SELECT machine_id AS id, status, round(anomaly_score::numeric,2) AS skor FROM machines ORDER BY 1;" -c "SELECT id, machine_id, start_ts::time(0) AS mulai, end_ts::time(0) AS selesai, category FROM events ORDER BY id DESC LIMIT 5;" -c "SELECT id, machine_id, ts::time(0), round(score::numeric,2) AS skor, resolved_ts::time(0) AS selesai FROM alerts ORDER BY id DESC LIMIT 5;"'
-```
-
-**Lead time peringatan dini** (untuk slide pitch):
-```
-docker compose exec -T db psql -U siaga -d siagamesin -c "SELECT a.id, a.machine_id, a.ts::time(0) AS alert, e.start_ts::time(0) AS berhenti, round(extract(epoch FROM e.start_ts - a.ts)) AS lead_detik, e.category FROM alerts a LEFT JOIN LATERAL (SELECT start_ts, category FROM events WHERE machine_id = a.machine_id AND start_ts >= a.ts ORDER BY start_ts LIMIT 1) e ON true ORDER BY a.id DESC LIMIT 10;"
+watch -n 2 'docker compose exec -T db psql -U siaga -d siagamesin -c "SELECT machine_id AS id, status, round(anomaly_score::numeric,2) AS score FROM machines ORDER BY 1;" -c "SELECT id, machine_id, start_ts::time(0) AS started, end_ts::time(0) AS ended, category FROM events ORDER BY id DESC LIMIT 5;" -c "SELECT id, machine_id, ts::time(0), round(score::numeric,2) AS score, resolved_ts::time(0) AS resolved FROM alerts ORDER BY id DESC LIMIT 5;"'
 ```
 
-## D. Menyambungkan AI dari peran 3
+**Early-warning lead time** (for the pitch slides):
+```
+docker compose exec -T db psql -U siaga -d siagamesin -c "SELECT a.id, a.machine_id, a.ts::time(0) AS alert, e.start_ts::time(0) AS stopped, round(extract(epoch FROM e.start_ts - a.ts)) AS lead_s, e.category FROM alerts a LEFT JOIN LATERAL (SELECT start_ts, category FROM events WHERE machine_id = a.machine_id AND start_ts >= a.ts ORDER BY start_ts LIMIT 1) e ON true ORDER BY a.id DESC LIMIT 10;"
+```
 
-Selama `AI_BASE_URL` kosong, bot memakai **mode mock**: voice note diberi transkrip contoh dan kategori ditentukan dari kata kunci. Setelah peran 3 mengirim URL + API key:
+## D. Connecting role 3's AI
+
+While `AI_BASE_URL` is empty, the bot runs in **mock mode**: voice notes get a sample transcript and categories come from keywords. Once role 3 sends the URL and API key:
 ```
 grep -q "^AI_BASE_URL=" .env || echo "AI_BASE_URL=" >> .env
 grep -q "^AI_API_KEY=" .env || echo "AI_API_KEY=" >> .env
-sed -i "s|^AI_BASE_URL=.*|AI_BASE_URL=https://alamat-dari-peran3|" .env
+sed -i "s|^AI_BASE_URL=.*|AI_BASE_URL=https://address-from-role3|" .env
 read -s -p "Paste API key: " K && sed -i "s|^AI_API_KEY=.*|AI_API_KEY=$K|" .env && unset K && echo
 docker compose up -d
-docker compose logs bot --tail 3      # harus: (AI: AMD)
+docker compose logs bot --tail 3      # should say: (AI: AMD)
 ```
-Kalau endpoint AMD error/mati, klasifikasi otomatis kembali ke kata kunci, jadi alur tidak macet.
+If the AMD endpoint errors or is down, classification falls back to keywords so the flow never stalls.
 
-## E. Cara kerja singkat
+## E. How it works
 
-- **Deteksi berhenti:** `current_a < STOP_CURRENT_A` selama `STOP_SECONDS` → event baru. Mesin `live` ditanya lewat Telegram; mesin `replay` diisi alasan otomatis oleh simulator.
-- **Jawaban operator:** teks atau voice note → `/transcribe` → `/classify` → kategori. Confidence < 0.6 → **Perlu dicek**. Semua panggilan AI tercatat di tabel `ai_calls`.
-- **Deteksi anomali:** rata-rata 10 detik terakhir dibandingkan baseline (median & sebaran) tiap sensor → nilai z. `z ≥ 3` selama 5 detik → alert + peringatan dini Telegram; `z < 2` → kembali normal. `anomaly_score = z ÷ 6` (maks 1).
-- **Restart aman:** event dan alert yang masih terbuka dilanjutkan setelah restart, dan program menunggu database siap saat boot.
+- **Stop detection:** `current_a < STOP_CURRENT_A` for `STOP_SECONDS` → new event. `live` machines get a Telegram question; `replay` machines get a reason from the simulator.
+- **Operator answers:** text or voice note → `/transcribe` → `/classify` → category. Confidence < 0.6 → **Needs review**. Every AI call is logged in `ai_calls`. Categories are stored in the role 3 contract values and shown in English (`labels.py`).
+- **Anomaly detection:** the 10-second average is compared with each sensor's baseline (median & spread) → z value. `z ≥ 3` for 5 seconds → alert + Telegram early warning; `z < 2` → back to normal. `anomaly_score = z ÷ 6` (max 1).
+- **Availability:** run time ÷ (run time + unplanned stops) within the selected range. Scheduled breaks and offline time are excluded. Shifts start at 06:00, 14:00 and 22:00 WIB (`SHIFT_STARTS` in `.env`).
+- **Safe restarts:** open events and alerts carry over after a restart, and every service waits for the database on boot.
 
 ## F. Troubleshooting
 
-| Gejala | Penyebab | Solusi |
+| Symptom | Cause | Fix |
 |---|---|---|
-| Perubahan kode tidak berpengaruh | Image belum di-build ulang | `docker compose up -d --build` |
-| `port is already allocated` | Proses lain memakai 8000/1883 (mis. service systemd lama) | `sudo systemctl disable --now mosquitto siagamesin-api siagamesin-worker siagamesin-bot siagamesin-sim` |
-| Pesan Telegram dobel | Bot jalan 2× (container + proses lain) | Pastikan hanya container `bot` yang jalan |
-| `CannotConnectNowError ... shutting down` di log | Terjadi saat Raspi dimatikan | Normal, abaikan |
-| Paste kode panjang terpotong | Batas terminal | Kirim file via `scp`, atau paste per bagian lalu cek `wc -l` |
-| IP Raspi berubah | DHCP | Pakai `yosua.local`, bukan IP |
-| Semua mesin dianggap anomali | Baseline tidak cocok (mis. rig baru) | Jalankan normal 15–30 menit → hitung ulang baseline |
-| Semua mesin ⚪ Offline di `/status` | Simulator mati & rig tidak mengirim data | `docker compose --profile sim up -d sim` |
-| URL publik tidak bisa dibuka | API mati / Funnel off | `curl localhost:8000/health`, lalu `tailscale funnel status` |
+| Code change has no effect | Image not rebuilt | `docker compose up -d --build` |
+| `port is already allocated` | Something else uses 8000/1883 (e.g. old systemd services) | `sudo systemctl disable --now mosquitto siagamesin-api siagamesin-worker siagamesin-bot siagamesin-sim` |
+| Duplicate Telegram messages | Bot running twice (container + another process) | Make sure only the `bot` container runs |
+| `CannotConnectNowError ... shutting down` in logs | Happens while the Pi shuts down | Normal, ignore |
+| Long pasted code gets cut off | Terminal limit | Paste in parts and check `wc -l` / `md5sum`, or copy the file with `scp` |
+| Pi IP changed | DHCP | Use `yosua.local`, not the IP |
+| Every machine flagged as anomalous | Baseline doesn't match (e.g. new rig) | Run normally for 15–30 min → recompute baseline |
+| All machines ⚪ Offline in `/status` | Simulator off and rig not sending | `docker compose --profile sim up -d sim` |
+| Public URL won't open | API down / Funnel off | `curl localhost:8000/health`, then `tailscale funnel status` |
 
-## G. Keamanan
+## G. Security
 
-- `.env` berizin `600`, masuk `.gitignore` dan `.dockerignore` (tidak ikut repo maupun image). Begitu juga `data/`.
-- Database tidak dibuka ke luar Docker; API memakai user `siaga` dan query berparameter.
-- API publik hanya punya endpoint GET.
-- Bot hanya menanggapi `TELEGRAM_CHAT_ID` yang terdaftar.
-- Log container dibatasi 3 × 10 MB per service supaya SD card tidak penuh.
-- MQTT masih tanpa password: aman untuk hotspot tim, **jangan** dipakai di WiFi publik.
+- `.env` has mode `600` and is in `.gitignore` and `.dockerignore` (never in the repo or the image). Same for `data/`.
+- The database isn't exposed outside Docker; the API uses the `siaga` user and parameterised queries.
+- The public API only has GET endpoints.
+- The bot only answers the registered `TELEGRAM_CHAT_ID`.
+- Container logs are capped at 3 × 10 MB per service so the SD card doesn't fill up.
+- MQTT has no password: fine on the team hotspot, **don't** use it on public Wi-Fi.
 
-## H. Rencana berikutnya
+## H. Remaining work
 
-- [ ] Endpoint `/events`, `/alerts`, `/availability`, `/pareto` (menunggu `types.ts`)
-- [ ] Sambung `/transcribe` + `/classify` asli (Rabu) dan `/explain` + `/score` (Kamis)
-- [ ] Endpoint `/ai-usage` (data sudah tercatat di `ai_calls`)
-- [ ] Username/password MQTT
-- [ ] Backup harian `pg_dump` + retensi telemetry
-- [ ] Bersihkan data uji sebelum demo
+- [ ] Connect real `/transcribe` + `/classify` (role 3), then `/explain`
+- [ ] Live `m1` from the ESP32 rig + recompute baseline (role 1)
+- [ ] Add the Vercel URL to `CORS_ORIGINS` (role 4)
+- [ ] Simulator option to trigger bearing wear on demand (for the demo video)
+- [ ] Measure pitch numbers (lead time, stops logged)
+- [ ] Friday: keep the simulator running · Saturday: clear test data before recording

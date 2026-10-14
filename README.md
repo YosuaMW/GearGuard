@@ -1,55 +1,54 @@
 # SiagaMesin
 
-**Mencatat kenapa mesin berhenti, lalu belajar untuk mencegahnya berhenti lagi.**
+**Log why machines stop, then learn to keep them from stopping again.**
 AMD Developer Hackathon ACT III · Track: Intelligent Industry
 
-SiagaMesin memantau mesin pabrik lama lewat sensor arus, getaran, dan suhu. Saat mesin berhenti, operator ditanya alasannya lewat Telegram (teks atau voice note). Saat pola sensor mulai menyimpang, sistem mengirim peringatan dini sebelum mesin rusak.
+SiagaMesin monitors legacy factory machines through current, vibration and temperature sensors. When a machine stops, the operator is asked why on Telegram (text or voice note). When the sensor pattern starts drifting, the system sends an early warning before the machine fails.
 
-## Arsitektur
+## Architecture
 
 ```
-ESP32 + sensor ──MQTT──► Raspberry Pi (edge gateway)
-                          ├─ Mosquitto (MQTT broker, :1883, hanya jaringan lokal)
-                          ├─ PostgreSQL (telemetry, events, alerts, baselines)
-                          ├─ worker  : simpan data, deteksi berhenti, deteksi anomali
-                          ├─ bot     : Telegram (tanya operator, /status, peringatan)
-                          └─ API     : FastAPI (:8000) ──Tailscale Funnel──► HTTPS publik
-                                          │                                  │
-                         AMD Developer Cloud ◄── dipanggil backend      Dashboard (Vercel)
+ESP32 + sensors ──MQTT──► Raspberry Pi (edge gateway, Docker Compose)
+                           ├─ mqtt   : Mosquitto broker (:1883, local network only)
+                           ├─ db     : PostgreSQL (telemetry, events, alerts, baselines, ai_calls)
+                           ├─ worker : stores data, detects stops and anomalies
+                           ├─ bot    : Telegram (asks operators, /status, early warnings)
+                           └─ api    : FastAPI (:8000) ──Tailscale Funnel──► public HTTPS
+                                          │                                   │
+                         AMD Developer Cloud ◄── called by backend        Dashboard (Vercel)
                          (/transcribe, /classify, /explain)
 ```
 
-## Dokumen per peran
+## Docs by role
 
-| Peran | Dokumen | Isi |
+| Role | Document | Contents |
 |---|---|---|
-| 1. Hardware & Model Anomali | [docs/peran1-hardware.md](docs/peran1-hardware.md) | Format MQTT, contoh kode ESP32, `/score`, rekaman data |
-| 2. Backend & Bot | [docs/raspi-setup.md](docs/raspi-setup.md) | Setup Raspi dari nol, cara menjalankan, troubleshooting |
-| 3. AI Engineer | [docs/peran3-ai.md](docs/peran3-ai.md) | Kontrak `/transcribe`, `/classify`, `/explain`, data usage |
-| 4. Frontend | [docs/peran4-frontend.md](docs/peran4-frontend.md) | URL API, bentuk JSON, status endpoint |
-| Semua | [docs/checklist-integrasi.md](docs/checklist-integrasi.md) | **Hal yang perlu disepakati antar-peran + deadline** |
+| 1. Hardware & anomaly model | [docs/role1-hardware.md](docs/role1-hardware.md) | MQTT format, ESP32 example, `/score`, data recording |
+| 2. Backend & bot | [docs/raspi-setup.md](docs/raspi-setup.md) | Raspberry Pi setup from scratch, daily commands, troubleshooting |
+| 3. AI engineer | [docs/role3-ai.md](docs/role3-ai.md) | `/transcribe`, `/classify`, `/explain` contracts, usage data |
+| 4. Frontend | [docs/role4-frontend.md](docs/role4-frontend.md) | API URL, every endpoint, dashboard page → endpoint map |
+| Everyone | [docs/integration-checklist.md](docs/integration-checklist.md) | **What still needs to be agreed between roles, with deadlines** |
 
-## Status (13 Okt 2026)
+## Status (14 Oct 2026)
 
-- ✅ MQTT → database, deteksi mesin berhenti, bot Telegram bertanya
-- ✅ Jawaban teks & voice note operator → kategori (mode mock, siap disambung ke AMD)
-- ✅ 4 mesin (m1 live, m2–m4 replay simulator)
-- ✅ Deteksi anomali z-score + peringatan dini detail di Telegram, perintah `/status`
-- ✅ `/machines` sesuai format frontend, CORS, HTTPS publik via Tailscale Funnel
-- ✅ Docker Compose, auto-start saat boot
-- ⏳ `/events`, `/alerts`, `/availability`, `/pareto` (menunggu `types.ts`)
-- ⏳ `/transcribe` + `/classify` asli (Rabu), `/explain` + `/score` (Kamis)
+- ✅ MQTT → database, stop detection, Telegram bot asks the operator
+- ✅ Operator text & voice answers → downtime category (mock mode, ready for AMD)
+- ✅ 4 machines: m1 Conveyor motor (live rig), m2 Pump, m3 Mixer, m4 Compressor (replay simulator)
+- ✅ Z-score anomaly detection + detailed Telegram early warnings, `/status` command
+- ✅ Dashboard API: `/machines`, `/telemetry`, `/summary`, `/events`, `/alerts`, `/pareto`, `/availability`, `/ai-usage`
+- ✅ CORS, public HTTPS via Tailscale Funnel, Docker Compose with auto-start on boot
+- ⏳ Real `/transcribe` + `/classify` (role 3), `/explain` (role 3), live ESP32 rig (role 1)
 
-## Menjalankan
+## Running
 
 ```
-cp .env.example .env        # isi token Telegram, dll.
+cp .env.example .env                       # fill in the Telegram token, etc.
 docker compose up -d --build
-docker compose --profile sim up -d sim   # opsional: simulator mesin replay
+docker compose --profile sim up -d sim     # optional: replay machine simulator
 ```
-Detail lengkap: [docs/raspi-setup.md](docs/raspi-setup.md).
+Full details: [docs/raspi-setup.md](docs/raspi-setup.md). API docs (Swagger): `http://localhost:8000/docs`.
 
-## Aturan repo
+## Repo rules
 
-- **Jangan pernah commit `.env`**, token bot, password database, atau API key. Gunakan `.env.example`.
-- Folder `data/` (voice note operator) tidak masuk repo.
+- **Never commit `.env`**, bot tokens, database passwords or API keys. Use `.env.example`.
+- The `data/` folder (operator voice notes) is not committed.
