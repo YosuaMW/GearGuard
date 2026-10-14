@@ -135,7 +135,7 @@ async def main(with_m1, calm, quiet):
         machines.update({m: Machine(m, cfg, "live") for m, cfg in LIVE_STANDIN.items()})
     state = {"random": not calm}
 
-    async with aiomqtt.Client(os.getenv("MQTT_HOST", "localhost")) as client:
+    async with aiomqtt.Client(username=os.getenv("MQTT_USERNAME") or None, password=os.getenv("MQTT_PASSWORD") or None, hostname=os.getenv("MQTT_HOST", "localhost")) as client:
         await client.subscribe(CMD_TOPIC)
         listener = asyncio.create_task(listen(client, machines, state))
         print(f"Simulator jalan: {', '.join(machines)} | kejadian acak: {'nyala' if state['random'] else 'mati'}", flush=True)

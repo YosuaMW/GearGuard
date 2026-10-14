@@ -200,7 +200,7 @@ async def main():
     await restore_state(pool)
     while True:
         try:
-            async with aiomqtt.Client(MQTT_HOST) as client:
+            async with aiomqtt.Client(username=os.getenv("MQTT_USERNAME") or None, password=os.getenv("MQTT_PASSWORD") or None, hostname=MQTT_HOST) as client:
                 await client.subscribe("siagamesin/+/telemetry")
                 print("Worker terhubung ke MQTT, menunggu data...")
                 async for msg in client.messages:

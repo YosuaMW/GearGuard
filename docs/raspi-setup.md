@@ -8,12 +8,12 @@ Everything runs with **Docker Compose**, so the same steps also work on a laptop
 | Component | Runs as | Port | Reachable from |
 |---|---|---|---|
 | `db` PostgreSQL 17 | container | – | inside Docker only |
-| `mqtt` Mosquitto | container | 1883 | local network (ESP32) |
+| `mqtt` Mosquitto (login required) | container | 1883 | local network + Tailscale Funnel (TLS :8443) |
 | `api` FastAPI | container | 8000 | local + Tailscale Funnel |
 | `worker` | container | – | – |
 | `bot` Telegram | container | – | – |
-| `sim` simulator | container (**optional**, profile `sim`) | – | – |
-| Tailscale Funnel | system service | 443 → 8000 | internet (HTTPS) |
+| `sim` simulator (m2–m4) | container (profile `sim`) | – | – |
+| Tailscale Funnel | system service | 443 → 8000, 8443 → 1883 | internet (HTTPS API, MQTT over TLS) |
 
 All containers use `restart: unless-stopped`: they start on boot and restart themselves if they crash.
 Hardware: Raspberry Pi 4B 4 GB, Debian 13 (trixie) 64-bit, hostname `yosua`.
@@ -38,7 +38,7 @@ SiagaMesin/
 │       ├── ai.py         # AMD client for /transcribe, /classify (+ mock mode)
 │       └── db.py         # database connection that waits for the DB to be ready
 ├── db/init.sql           # full schema (runs automatically when the DB is first created)
-├── deploy/               # mosquitto config (+ old systemd files, unused)
+├── deploy/               # mosquitto.conf, passwd (MQTT logins, NOT committed) (+ old systemd files, unused)
 ├── tools/
 │   ├── sim.py            # simulator for m2–m4 (MQTT commands: wear / stop / calm)
 │   ├── metrics.py        # numbers for the pitch slides
@@ -84,23 +84,35 @@ chmod 600 .env
 
 **Never screenshot the token or post it in a group.** If it leaks: BotFather → `/revoke`.
 
-### 4. Start
+### 4. MQTT login
+Mosquitto only accepts clients with a username/password. Create the password file and put the same password in `.env`:
+```
+P=$(openssl rand -hex 8); echo "MQTT password: $P"
+docker run --rm -v "$PWD/deploy:/m" eclipse-mosquitto:2 mosquitto_passwd -c -b /m/passwd siaga "$P"
+sudo chown 1883:1883 deploy/passwd && sudo chmod 600 deploy/passwd
+sed -i "s/^MQTT_PASSWORD=.*/MQTT_PASSWORD=$P/" .env
+```
+`deploy/passwd` is in `.gitignore`. Share the password with role 1 privately (for the ESP32), never in the repo.
+
+### 5. Start
 ```
 docker compose up -d --build
 docker compose ps
 ```
 The first build takes ~2–10 minutes. Five services (`db`, `mqtt`, `api`, `worker`, `bot`) should be **Up**.
 
-### 5. Tailscale Funnel (public HTTPS)
+### 6. Tailscale Funnel (public API + MQTT)
 ```
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up                    # open the link shown, log in, click Connect
-sudo tailscale funnel --bg 8000      # if asked, open the /f/funnel link and click Enable
+sudo tailscale funnel --bg 8000      # API; if asked, open the /f/funnel link and click Enable
+sudo tailscale funnel --bg --tls-terminated-tcp=8443 tcp://localhost:1883   # MQTT over TLS
 ```
-Current public address: `https://yosua.tailf140ab.ts.net`
+Public addresses: API `https://yosua.tailf140ab.ts.net`, MQTT `yosua.tailf140ab.ts.net:8443` (TLS, login required). Both survive reboots.
+Turn public MQTT off: `sudo tailscale funnel --tls-terminated-tcp=8443 off`.
 In the Tailscale console → Machines → **⋯** on `yosua` → **Disable key expiry**.
 
-### 6. Normal-condition baseline
+### 7. Normal-condition baseline
 Start the simulator (or the real rig), wait at least 5 minutes, then:
 ```
 docker compose --profile sim up -d sim
@@ -120,19 +132,22 @@ All from `~/hackathon/siagamesin`.
 | Live worker log | `docker compose logs -f worker` (exit with `Ctrl+C`, the container keeps running) |
 | Recent bot log | `docker compose logs bot --tail 50` |
 | **Apply code changes** | `docker compose up -d --build` |
-| Start the simulator | `docker compose --profile sim up -d sim` |
-| Stop the simulator | `docker compose --profile sim stop sim` |
+| Start the simulator | `docker compose --profile sim up -d sim` (add `--force-recreate` after changing `.env`) |
+| Stop the simulator | `docker compose --profile sim stop sim` (stays off after reboot) |
 | Recompute baseline | `docker compose exec worker python /app/tools/baseline.py --minutes 30` |
 | Open the database | `docker compose exec db psql -U siaga -d siagamesin` |
 | Stop everything | `docker compose down` (database data stays in the volume) |
 | Start everything | `docker compose up -d` |
+| Apply `.env` changes | `docker compose up -d --force-recreate worker bot api` |
 
-The **simulator** doesn't start on its own (profile `sim`). If it is running when the Pi restarts, it comes back too.
+The **simulator** is in profile `sim`, so `docker compose up -d` alone doesn't start it. Once started, **leave it running and it comes back after every reboot** (`restart: unless-stopped`). Only `docker compose stop sim` keeps it off.
 **From Friday (deploy) until judging ends, the simulator must be running**, so the dashboard isn't empty when judges open it.
 
-**Quiet Telegram while the simulator runs:** add `ALERT_NOTIFY_SOURCES=live` to `.env` and run `docker compose up -d`. Early warnings for replay machines (m2–m4) then stay on the dashboard only.
+**Which early warnings go to Telegram:** `ALERT_NOTIFY_SOURCES` in `.env`. `live` = only the real rig (quiet, default); `live,replay` = m2–m4 too (for demos). Apply with `docker compose up -d --force-recreate worker`. Stop questions are only asked for `live` machines either way.
 
-**Simulator commands** (no restart needed), sent with `docker compose exec mqtt mosquitto_pub -t siagamesin/sim/cmd -m "<command>"`:
+**MQTT commands need the login.** Load it once per terminal with `source .env`, then add `-u siaga -P "$MQTT_PASSWORD"` to every `mosquitto_sub` / `mosquitto_pub`.
+
+**Simulator commands** (no restart needed), sent with `docker compose exec mqtt mosquitto_pub -u siaga -P "$MQTT_PASSWORD" -t siagamesin/sim/cmd -m "<command>"`:
 
 | Command | Effect |
 |---|---|
@@ -144,7 +159,9 @@ The **simulator** doesn't start on its own (profile `sim`). If it is running whe
 
 **`m1` = live ESP32 rig.** The simulator only covers m2–m4. While the rig is unplugged, `m1` shows as `stopped` with `online: false`. To simulate `m1` again (no rig available), add `"--with-m1"` back to the `sim` service `command` in `docker-compose.yml` and run `docker compose --profile sim up -d sim`.
 
-**Connecting the ESP32:** it must be on the same Wi-Fi as the Pi and publish to `yosua.local:1883`. Watch it arrive with `docker compose exec mqtt mosquitto_sub -t "siagamesin/m1/#" -v`. Details: [role1-hardware.md](role1-hardware.md).
+**Connecting the ESP32:** from any network to `yosua.tailf140ab.ts.net:8443` (TLS), or on the same Wi-Fi to `yosua.local:1883`; login required on both. Watch it arrive with `docker compose exec mqtt mosquitto_sub -u siaga -P "$MQTT_PASSWORD" -t "siagamesin/m1/#" -v`. The first real data will likely trigger false early warnings until the baseline is recomputed (section A.7). Details: [role1-hardware.md](role1-hardware.md).
+
+**Change the MQTT password** (e.g. if it leaked): repeat section A.4 with `sudo rm deploy/passwd` first, then `docker compose up -d --force-recreate mqtt worker` and `docker compose --profile sim up -d --force-recreate sim`. Send the new password to role 1.
 
 **Pitch numbers:** `docker compose exec worker python /app/tools/metrics.py --hours 24` (add `--live-only` for the real rig only).
 
@@ -155,10 +172,11 @@ The **simulator** doesn't start on its own (profile `sim`). If it is running whe
 | Local API | `curl -s localhost:8000/health` | `"status":"ok"` |
 | Public API | `https://yosua.tailf140ab.ts.net/health` | `"status":"ok"` |
 | All endpoints | `https://yosua.tailf140ab.ts.net/docs` | Swagger lists every endpoint |
-| Containers | `docker compose ps` | All **Up**, `db` **healthy** |
-| MQTT traffic | `docker compose exec mqtt mosquitto_sub -t "siagamesin/#" -v` | A message every second |
+| Containers | `docker ps --format "table {{.Names}}\t{{.Status}}"` | 6 **Up** (incl. `sim`), `db` **healthy** |
+| MQTT traffic | `docker compose exec mqtt mosquitto_sub -u siaga -P "$MQTT_PASSWORD" -t "siagamesin/#" -v` | A message every second |
+| MQTT login enforced | `docker compose exec mqtt mosquitto_sub -t "#" -C 1 -W 3` | `not authorised` |
 | Bot | send `/status` on Telegram | All machines listed |
-| Tailscale | `tailscale funnel status` | proxy to `127.0.0.1:8000` |
+| Tailscale | `tailscale funnel status` | `https://…` → `127.0.0.1:8000` and `tcp://…:8443` → `localhost:1883` |
 | Auto-start | `systemctl is-enabled docker tailscaled` | `enabled` ×2 |
 
 **Watch the database live:**
@@ -204,6 +222,8 @@ If the AMD endpoint errors or is down, classification falls back to keywords so 
 | Pi IP changed | DHCP | Use `yosua.local`, not the IP |
 | Every machine flagged as anomalous | Baseline doesn't match (e.g. new rig) | Run normally for 15–30 min → recompute baseline |
 | All machines ⚪ Offline in `/status` | Simulator off and rig not sending | `docker compose --profile sim up -d sim` |
+| `Not authorized` / `not authorised` in sim or worker logs | Missing or wrong MQTT login | Check `MQTT_PASSWORD` in `.env` matches `deploy/passwd`; rebuild the sim image after code changes: `docker compose --profile sim up -d --build sim` |
+| `mosquitto_sub` hangs with no output | Nothing is publishing (e.g. sim stopped or rejected) | Add `-W 10` to time out; check `docker compose logs sim --tail 5` |
 | Public URL won't open | API down / Funnel off | `curl localhost:8000/health`, then `tailscale funnel status` |
 
 ## G. Security
@@ -213,12 +233,11 @@ If the AMD endpoint errors or is down, classification falls back to keywords so 
 - The public API only has GET endpoints.
 - The bot only answers the registered `TELEGRAM_CHAT_ID`.
 - Container logs are capped at 3 × 10 MB per service so the SD card doesn't fill up.
-- MQTT has no password: fine on the team hotspot, **don't** use it on public Wi-Fi.
+- MQTT requires a username/password (`deploy/passwd`, not committed). From the internet it is only reachable through Funnel on `:8443` with TLS.
 
 ## H. Remaining work
 
 - [ ] Connect real `/transcribe` + `/classify` (role 3), then `/explain`
 - [ ] Live `m1` from the ESP32 rig + recompute baseline (role 1)
-- [ ] Add the Vercel URL to `CORS_ORIGINS` (role 4)
 - [ ] Measure pitch numbers with `tools/metrics.py` once there is enough data
 - [ ] Friday: keep the simulator running · Saturday: clear test data before recording

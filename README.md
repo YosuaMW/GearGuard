@@ -9,7 +9,7 @@ SiagaMesin monitors legacy factory machines through current, vibration and tempe
 
 ```
 ESP32 + sensors ──MQTT──► Raspberry Pi (edge gateway, Docker Compose)
-                           ├─ mqtt   : Mosquitto broker (:1883, local network only)
+                           ├─ mqtt   : Mosquitto broker (login required; :1883 LAN, :8443 TLS via Funnel)
                            ├─ db     : PostgreSQL (telemetry, events, alerts, baselines, ai_calls)
                            ├─ worker : stores data, detects stops and anomalies
                            ├─ bot    : Telegram (asks operators, /status, early warnings)
@@ -36,7 +36,9 @@ ESP32 + sensors ──MQTT──► Raspberry Pi (edge gateway, Docker Compose)
 - ✅ 4 machines: m1 Conveyor motor (live rig), m2 Pump, m3 Mixer, m4 Compressor (replay simulator)
 - ✅ Z-score anomaly detection + detailed Telegram early warnings, `/status` command
 - ✅ Dashboard API: `/machines`, `/telemetry`, `/summary`, `/events`, `/alerts`, `/pareto`, `/availability`, `/ai-usage`
-- ✅ CORS, public HTTPS via Tailscale Funnel, Docker Compose with auto-start on boot
+- ✅ CORS, public HTTPS via Tailscale Funnel, Docker Compose with auto-start on boot (simulator included)
+- ✅ MQTT with username/password, reachable from the internet over TLS (`:8443`)
+- ✅ Dashboard live at https://siaga-mesin.vercel.app (code in [`dashboard/`](dashboard/))
 - ⏳ Real `/transcribe` + `/classify` (role 3), `/explain` (role 3), live ESP32 rig (role 1)
 
 ## Running
@@ -50,15 +52,23 @@ Full details: [docs/raspi-setup.md](docs/raspi-setup.md). API docs (Swagger): `h
 
 ## Connecting the hardware
 
-The ESP32 on the live rig joins the **same Wi-Fi as the Raspberry Pi** and publishes one JSON message per second to MQTT topic `siagamesin/m1/telemetry` on `yosua.local:1883`:
+The ESP32 on the live rig publishes one JSON message per second to MQTT topic `siagamesin/m1/telemetry`. It can connect from **any network** (phone hotspot, campus Wi-Fi):
+
+| | Host | Port | Notes |
+|---|---|---|---|
+| Internet (recommended) | `yosua.tailf140ab.ts.net` | `8443` | TLS: use `WiFiClientSecure` |
+| Same Wi-Fi as the Pi | `yosua.local` | `1883` | plain `WiFiClient` |
+
+Username `siaga`; the password is shared privately by Yosua (never in the repo).
 
 ```json
 {"machine_id": "m1", "current_a": 1.8, "vib_rms": 0.42, "temp_c": 41.5}
 ```
 
-The backend stores it, detects stops and anomalies, asks the operator on Telegram and serves it to the dashboard. While the rig runs, the simulator only covers m2–m4. Wiring, message format and a test checklist: [docs/role1-hardware.md](docs/role1-hardware.md).
+The backend stores it, detects stops and anomalies, asks the operator on Telegram and serves it to the dashboard. The simulator only covers m2–m4, so it never clashes with the rig. Wiring (PZEM-004T, MPU6050, LM35), example code and a test checklist: [docs/role1-hardware.md](docs/role1-hardware.md).
 
 ## Repo rules
 
-- **Never commit `.env`**, bot tokens, database passwords or API keys. Use `.env.example`.
+- **Never commit `.env`**, bot tokens, database/MQTT passwords or API keys. Use `.env.example`.
+- `deploy/passwd` (MQTT password hashes) is not committed either.
 - The `data/` folder (operator voice notes) is not committed.

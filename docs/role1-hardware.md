@@ -6,10 +6,18 @@ How to connect the ESP32 and sensors to the SiagaMesin backend on the Raspberry 
 
 ## 1. Network
 
-- **The ESP32 and the Raspberry Pi must be on the same Wi-Fi network.** MQTT is not exposed to the internet.
-- Avoid campus/public Wi-Fi (captive portals and client isolation block device-to-device traffic). Safest: a **phone hotspot** or a dedicated team router.
-- Broker: **`yosua.local`**, port **1883**, no username/password for now.
-- The Pi's IP can change. Resolve `yosua.local` with **ESPmDNS** instead of hardcoding an IP. Fallback: check the IP on the Pi with `hostname -I`.
+The broker can be reached two ways. **Option A is recommended**: it works from any network.
+
+| | Option A: Internet (recommended) | Option B: Same Wi-Fi as the Pi |
+|---|---|---|
+| Host | `yosua.tailf140ab.ts.net` | `yosua.local` (or the Pi's IP) |
+| Port | `8443` (TLS) | `1883` (plain) |
+| Arduino client | `WiFiClientSecure` + `setInsecure()` | `WiFiClient` |
+| Works on | any Wi-Fi: phone hotspot, campus, home | only the Pi's network, without client isolation |
+
+- **Login is required on both:** username `siaga`, password from Yosua (shared privately; never put it in the repo).
+- Option A goes through Tailscale Funnel, which handles TLS, so traffic and password are encrypted.
+- Option B: the Pi's IP can change, so resolve `yosua.local` with **ESPmDNS**. Campus/public Wi-Fi usually blocks device-to-device traffic, so use Option A there.
 
 ## 2. MQTT message format
 
@@ -33,7 +41,7 @@ How to connect the ESP32 and sensors to the SiagaMesin backend on the Raspberry 
 | `machine_id` | ✅ | `m1` for the live rig |
 | `current_a` | ✅ | Motor current (A), from the PZEM-004T |
 | `vib_rms` | ✅ | **Vibration RMS over 1 second**, not raw samples. Compute it on the ESP32 from hundreds of accelerometer samples |
-| `temp_c` | ✅ | Motor body temperature (°C), from the DS18B20 |
+| `temp_c` | ✅ | Motor body temperature (°C), from the LM35 |
 | `ts` | optional | ISO 8601 UTC. If omitted, the backend uses the Pi's clock (recommended unless the ESP32 is NTP-synced) |
 | `name`, `source` | optional | `source` defaults to `live` |
 
@@ -51,56 +59,76 @@ ESP32 (sensors) ──Wi-Fi──► MQTT broker on the Pi (yosua.local:1883)
 
 The ESP32 only needs to join the **same Wi-Fi as the Pi** and publish one JSON message per second to `siagamesin/m1/telemetry`. Everything after that (storing, stop detection, anomaly detection, Telegram questions, dashboard) is handled by the backend.
 
-**Recommended wiring (ESP32 DevKit V1)**
+**Wiring (ESP32 DevKit V1)**
 
 | Sensor | Pins | Notes |
 |---|---|---|
-| PZEM-004T v3 (current) | TX → GPIO16 (RX2), RX → GPIO17 (TX2), 5 V → VIN, GND | CT clamp around **one** wire (live) of the fan's power cable; 220 V wiring stays inside the closed box with the MCB |
+| PZEM-004T v3 (current) | TX → GPIO16 (RX2), RX → GPIO17 (TX2), 5 V → VIN, GND | CT clamp around **one** wire (live) of the motor's power cable; 220 V wiring stays inside the closed box with the MCB |
 | MPU6050 (vibration) | SDA → GPIO21, SCL → GPIO22, VCC → 3V3, GND | Mount it firmly on the motor body (bolt or strong double tape) |
-| DS18B20 (temperature) | DATA → GPIO4 + 4.7 kΩ pull-up to 3V3, VCC → 3V3, GND | Taped to the motor housing |
+| LM35 (temperature) | VCC → VIN (5 V), OUT → **GPIO34**, GND | Taped to the motor housing. Needs ≥ 4 V supply; output is only ~10 mV/°C so it is safe for the ESP32 ADC |
 
-Arduino libraries: `PubSubClient`, `PZEM004Tv30`, `Adafruit MPU6050` (+ `Adafruit Unified Sensor`), `OneWire`, `DallasTemperature`. `WiFi` and `ESPmDNS` are built into the ESP32 core. Board: **ESP32 Dev Module**.
+Arduino libraries: `PubSubClient`, `PZEM004Tv30`, `Adafruit MPU6050` (+ `Adafruit Unified Sensor`). `WiFi`, `WiFiClientSecure` and `ESPmDNS` are built into the ESP32 core. Board: **ESP32 Dev Module**.
 
 **Vibration RMS:** sample the accelerometer ~400 times over 1 second, subtract the average of each axis (removes gravity and offset), take the RMS of what remains, and convert m/s² to g (÷ 9.80665). Send that single number as `vib_rms`.
 
+**Temperature (LM35):** connect OUT to an **ADC1 pin (GPIO32–39)**; ADC2 pins can't be read while Wi-Fi is on. Average a few calibrated readings: °C = millivolts ÷ 10. If readings jump around with long wires, add a 0.1 µF capacitor between OUT and GND near the sensor.
+```cpp
+float readTemp() {
+  uint32_t mv = 0;
+  for (int i = 0; i < 32; i++) mv += analogReadMilliVolts(34);
+  return (mv / 32.0) / 10.0;   // 10 mV = 1 °C
+}
+```
+
 **Connection checklist**
-1. On the Pi, watch incoming MQTT: `docker compose exec mqtt mosquitto_sub -t "siagamesin/#" -v`
-2. First flash a sketch that sends **fixed fake values** (the minimal example in 3b with constants instead of sensor reads). The Serial Monitor (115200) should show Wi-Fi connected, the broker IP found, MQTT connected, then one message per second.
+1. On the Pi, watch incoming MQTT: `source .env && docker compose exec mqtt mosquitto_sub -u siaga -P "$MQTT_PASSWORD" -t "siagamesin/#" -v`
+2. First flash a sketch that sends **fixed fake values** (the minimal example in 3b with constants instead of sensor reads). The Serial Monitor (115200) should show Wi-Fi connected, MQTT connected, then one message per second.
 3. The Pi terminal from step 1 shows `siagamesin/m1/telemetry {...}` every second.
 4. `/status` on Telegram or `GET /machines` shows **Conveyor motor** running and online.
 5. Switch to real sensor reads. Every message should contain all three fields. If a sensor fails, **leave its field out** rather than sending 0; a missing or zero current is read as "stopped".
 6. Run the rig normally for 15–30 min, then recompute the baseline (section 4).
 
-**If the ESP32 can't find the broker:** it can't resolve `yosua.local` on that network. Use the Pi's IP instead (`hostname -I` on the Pi) and remember it changes if the Pi moves to another Wi-Fi.
+**If MQTT won't connect**, check `rc` in the Serial Monitor:
 
-## 3b. Minimal ESP32 example (Arduino)
+| `rc` | Meaning | Fix |
+|---|---|---|
+| `5` | Not authorised | Wrong username/password |
+| `-2` | Connection failed | Wrong host/port, no internet, or (Option A) `WiFiClientSecure` / `setInsecure()` missing. Option B: `yosua.local` not resolved, use the Pi's IP (`hostname -I`) |
 
-Libraries: `PubSubClient`, `ESPmDNS` (built into the ESP32 core).
+## 3b. Minimal ESP32 example (Arduino, Option A)
 
 ```cpp
 #include <WiFi.h>
-#include <ESPmDNS.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 
-const char* SSID = "HOTSPOT_NAME";
-const char* PASS = "HOTSPOT_PASSWORD";
+const char* SSID      = "WIFI_NAME";
+const char* PASS      = "WIFI_PASSWORD";
+const char* MQTT_HOST = "yosua.tailf140ab.ts.net";
+const int   MQTT_PORT = 8443;
+const char* MQTT_USER = "siaga";
+const char* MQTT_PASS = "ASK_YOSUA";
 
-WiFiClient net;
+WiFiClientSecure net;
 PubSubClient mqtt(net);
-IPAddress brokerIP;
 
 void connectMqtt() {
   while (!mqtt.connected()) {
-    if (brokerIP == IPAddress()) brokerIP = MDNS.queryHost("yosua");  // yosua.local
-    mqtt.setServer(brokerIP, 1883);
-    if (!mqtt.connect("esp32-m1")) { brokerIP = IPAddress(); delay(2000); }
+    if (!mqtt.connect("esp32-m1", MQTT_USER, MQTT_PASS)) {
+      Serial.printf("MQTT failed, rc=%d\n", mqtt.state());   // 5 = wrong login, -2 = network
+      delay(2000);
+    }
   }
+  Serial.println("MQTT connected");
 }
 
 void setup() {
+  Serial.begin(115200);
   WiFi.begin(SSID, PASS);
   while (WiFi.status() != WL_CONNECTED) delay(500);
-  MDNS.begin("esp32-m1");
+  Serial.println("Wi-Fi connected");
+  net.setInsecure();               // traffic is still encrypted; the certificate is not checked
+  mqtt.setServer(MQTT_HOST, MQTT_PORT);
   connectMqtt();
 }
 
@@ -110,7 +138,7 @@ void loop() {
 
   float current = readCurrent();   // PZEM-004T
   float vibRms  = readVibRms();    // RMS of accelerometer samples over ~1 s
-  float temp    = readTemp();      // DS18B20
+  float temp    = readTemp();      // LM35
 
   char buf[160];
   snprintf(buf, sizeof(buf),
@@ -122,9 +150,13 @@ void loop() {
 
 `readVibRms()` should block for about 1 second while sampling, so the loop naturally runs at 1 Hz.
 
-**Test without an ESP32** (from a laptop or the Pi on the same network):
+**Option B (same Wi-Fi):** use `WiFiClient net;` instead of `WiFiClientSecure`, drop `setInsecure()`, and connect to `yosua.local` port `1883` (resolve it with `MDNS.queryHost("yosua")` from `ESPmDNS`, or use the Pi's IP).
+
+**Test without an ESP32**
+- From a phone: an MQTT app (e.g. MyMQTT, IoT MQTT Panel, MQTTool) with host `yosua.tailf140ab.ts.net`, port `8443`, **SSL/TLS on**, username/password. Subscribe to `siagamesin/#` and publish to `siagamesin/test/hp` (the `test` topic is ignored by the backend).
+- From a laptop with `mosquitto-clients`:
 ```
-mosquitto_pub -h yosua.local -t siagamesin/m1/telemetry -m '{"machine_id":"m1","current_a":1.8,"vib_rms":0.42,"temp_c":41.5}'
+mosquitto_pub -h yosua.tailf140ab.ts.net -p 8443 --capath /etc/ssl/certs -u siaga -P <password> -t siagamesin/m1/telemetry -m '{"machine_id":"m1","current_a":1.8,"vib_rms":0.42,"temp_c":41.5}'
 ```
 Then send `/status` to the Telegram bot, or open `/machines` on the API.
 
