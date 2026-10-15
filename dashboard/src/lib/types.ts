@@ -1,4 +1,4 @@
-// Response shapes of the SiagaMesin backend (role 2).
+// Response shapes of the GearGuard backend (role 2).
 // Source of truth: docs/role4-frontend.md in github.com/YosuaMW/SiagaMesin.
 // Times are ISO 8601 UTC; scores and availability are 0–1. Many values can be null.
 

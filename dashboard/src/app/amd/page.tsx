@@ -13,7 +13,7 @@ export default function AmdPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Running on AMD</h1>
         <p className="mt-1 max-w-[70ch] text-sm text-ink-2">
-          The speech and language models behind SiagaMesin are served through AMD Token Factory. Every call the
+          The speech and language models behind GearGuard are served through AMD Token Factory. Every call the
           backend makes is logged here.
         </p>
       </header>

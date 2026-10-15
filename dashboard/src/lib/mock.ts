@@ -271,18 +271,26 @@ function seed() {
 }
 seed();
 
-function shiftWindow(): Window {
+/** Window for a `range` query, shaped like the backend's. The simulator keeps 8 h of history for every range. */
+function shiftWindow(range: string = "shift"): Window {
   const wib = new Date(Date.now() + 7 * 3600_000); // shift clock is WIB
   const h = wib.getUTCHours();
   const [no, startH] = h >= 22 || h < 6 ? [3, 22] : h >= 14 ? [2, 14] : [1, 6];
   const endH = (startH + 8) % 24;
   const pad = (n: number) => String(n).padStart(2, "0");
+  const labels: Record<string, string> = {
+    shift: `Shift ${no} · ${pad(startH)}:00–${pad(endH)}:00`,
+    today: "Today",
+    "1h": "Last 1 h",
+    "8h": "Last 8 h",
+    "24h": "Last 24 h",
+  };
   return {
-    range: "shift",
-    label: `Shift ${no} · ${pad(startH)}:00–${pad(endH)}:00`,
-    start: iso(Date.now() - 4 * 3600_000),
+    range: (labels[range] ? range : "shift") as Window["range"],
+    label: labels[range] ?? labels.shift,
+    start: iso(Date.now() - 8 * 3600_000),
     end: iso(Date.now()),
-    shift_end: iso(Date.now() + 4 * 3600_000),
+    shift_end: range === "shift" ? iso(Date.now() + 3600_000) : null,
   };
 }
 
@@ -297,7 +305,7 @@ function downtimeBy(id?: string) {
   return { planned: planned / 60, unplanned: unplanned / 60 };
 }
 
-function availability(): AvailabilityReport {
+function availability(range = "shift"): AvailabilityReport {
   let run = 0;
   let down = 0;
   const machines = SPECS.map((s) => {
@@ -314,7 +322,7 @@ function availability(): AvailabilityReport {
       planned_stop_minutes: r(d.planned, 1),
     };
   });
-  return { window: shiftWindow(), line_availability: r(run / (run + down), 4), machines };
+  return { window: shiftWindow(range), line_availability: r(run / (run + down), 4), machines };
 }
 
 function machines(): Machine[] {
@@ -370,7 +378,7 @@ export async function mockGet(path: string): Promise<unknown> {
     }
 
     case "/summary": {
-      const av = availability();
+      const av = availability(q.get("range") ?? "shift");
       return {
         window: av.window,
         availability: av.line_availability,
@@ -422,11 +430,11 @@ export async function mockGet(path: string): Promise<unknown> {
             cumulative_pct: r((cum / total) * 100, 1),
           };
         });
-      return { window: shiftWindow(), total_minutes: r(total, 1), unexplained_minutes: r(unexplained, 1), categories } satisfies Pareto;
+      return { window: shiftWindow(q.get("range") ?? "shift"), total_minutes: r(total, 1), unexplained_minutes: r(unexplained, 1), categories } satisfies Pareto;
     }
 
     case "/availability":
-      return availability();
+      return availability(q.get("range") ?? "shift");
 
     case "/ai-usage": {
       const row = (ep: "transcribe" | "classify" | "explain", description: string, model: string) => ({

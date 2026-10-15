@@ -1,6 +1,8 @@
-# SiagaMesin Dashboard
+# GearGuard Dashboard
 
-Web dashboard for SiagaMesin (AMD Developer Hackathon ACT III, Intelligent Industry track).
+<img src="public/brand/gearguard-logo-stacked.svg" alt="GearGuard" height="120">
+
+Web dashboard for GearGuard, formerly SiagaMesin (AMD Developer Hackathon ACT III, Intelligent Industry track).
 Shows machine status, predictive alerts with explanations, operator downtime reasons from voice notes,
 Availability and the downtime Pareto.
 
@@ -26,6 +28,19 @@ operator, gets a voice-note reason at 40 s; M2 vibration creeps up from 45 s and
 80 s and is answered at 95 s.
 
 `NEXT_PUBLIC_API_URL` is read at build time. After changing it on Vercel, redeploy.
+
+Optional: `NEXT_PUBLIC_DOWNTIME_COST_PER_MIN` sets the default cost of one minute of unplanned downtime
+(Rupiah, default 15000). Anyone can change it on the Reports page; their value is kept in their browser.
+
+## Features
+
+- **Overview**: line diagram, shift KPIs with downtime cost, machine cards with live vibration, predictive alerts, today's events
+- **Machines**: current, vibration and temperature with alert limits; stops and operator answers per machine
+- **Reports**: state timeline per machine (running, anomaly, unplanned stop, scheduled break), downtime Pareto,
+  availability, and a maintenance table with downtime cost, breakdowns, MTTR and MTBF
+  (breakdown = stop for a mechanical, electrical or overheat reason)
+- **Running on AMD**: calls, latency and success rate of each AI step
+- **Notifications**: a notice for every new alert, stop and operator answer; the bell in the header turns on a sound
 
 ## Backend contract
 
@@ -58,11 +73,26 @@ The backend must allow the dashboard's origin in `CORS_ORIGINS` (send the Vercel
 src/lib/api.ts        every backend call goes through here (add a login token here later)
 src/lib/mock.ts       browser simulator, used when NEXT_PUBLIC_API_URL is empty
 src/lib/plant.tsx     polls machines/telemetry/alerts/events/summary once for the whole app
+src/lib/maintenance.ts  MTTR / MTBF / unplanned downtime calculations
+src/lib/prefs.ts      per-browser settings (downtime cost, sound)
 src/app/page.tsx      Overview
 src/app/machines/     Machine detail (ids listed in generateStaticParams)
 src/app/reports/      Pareto and availability
 src/app/amd/          Running on AMD
 ```
+
+## Brand
+
+All logo files are in `public/brand/`, each as SVG and transparent PNG, with a `-dark` version for dark backgrounds:
+
+| File | Use |
+|---|---|
+| `gearguard-logo-stacked` | Cover, title slide (symbol above the name) |
+| `gearguard-logo` | Header, README, slide footer (symbol beside the name) |
+| `gearguard-mark` | Full symbol with the G, 100 px and larger |
+| `gearguard-icon` | Simple symbol without the G, for small sizes; also the browser tab icon (`src/app/icon.svg`) |
+
+Navy `#0f1e33`, blue `#1570ef`. Wordmark set in Russo One, outlined, so no font is needed.
 
 ## Design rule
 

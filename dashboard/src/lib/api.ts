@@ -1,6 +1,6 @@
 // Every call to the backend goes through this file.
 // - NEXT_PUBLIC_API_URL empty  → in-browser simulator (src/lib/mock.ts)
-// - NEXT_PUBLIC_API_URL set    → SiagaMesin FastAPI on the Pi (role 2)
+// - NEXT_PUBLIC_API_URL set    → GearGuard FastAPI on the Pi (role 2)
 // When login is added later, attach the token in `get()` only.
 
 import { mockGet } from "./mock";
