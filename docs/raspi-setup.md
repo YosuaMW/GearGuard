@@ -63,7 +63,7 @@ docker run --rm hello-world
 ### 2. Code
 ```
 mkdir -p ~/hackathon && cd ~/hackathon
-git clone git@github.com:YosuaMW/SiagaMesin.git siagamesin
+git clone git@github.com:YosuaMW/GearGuard.git siagamesin
 cd siagamesin
 cp .env.example .env
 chmod 600 .env
