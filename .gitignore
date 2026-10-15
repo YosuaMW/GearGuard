@@ -4,3 +4,14 @@ __pycache__/
 data/
 deploy/passwd
 deploy/passwd
+.env.example
+__pycache__/
+.pytest_cache/
+manuals/
+!.env.example
+node_modules/
+__pycache__/
+*.log
+.DS_Store
+.vscode/
+.git

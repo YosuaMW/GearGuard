@@ -1,0 +1,15 @@
+# Layanan AI berdiri sendiri (tidak ikut compose Raspberry Pi). Jalankan di host yang bisa dijangkau Pi lewat HTTPS.
+#   cp .env.example .env && docker compose up -d --build
+services:
+  ai:
+    build: .
+    env_file: .env
+    ports:
+      - "8001:8001"
+    volumes:
+      - ai_data:/srv/data            # indeks RAG + riwayat perbaikan tahan restart
+      - ./manuals:/srv/data/manuals  # taruh PDF manual di ai/manuals/
+    restart: unless-stopped
+
+volumes:
+  ai_data:
