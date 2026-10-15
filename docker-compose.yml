@@ -75,6 +75,19 @@ services:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
 
+  stt:
+    build: ./stt
+    environment:
+      STT_MODEL: base
+      STT_API_KEY: ${STT_API_KEY}
+    volumes:
+      - stt_models:/models
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
 volumes:
   dbdata:
   ai_data:
+  stt_models:
