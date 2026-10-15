@@ -64,5 +64,17 @@ services:
     profiles: ["sim"]
     command: ["python", "/app/tools/sim.py", "--quiet"]
 
+  ai:
+    build: ./AI
+    env_file: ./AI/.env
+    volumes:
+      - ai_data:/srv/data
+      - ./AI/manuals:/srv/data/manuals
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
 volumes:
   dbdata:
+  ai_data:
