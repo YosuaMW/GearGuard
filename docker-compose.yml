@@ -80,6 +80,7 @@ services:
     environment:
       STT_MODEL: base
       STT_API_KEY: ${STT_API_KEY}
+      STT_LANGUAGE: ${STT_LANGUAGE:-en}
     volumes:
       - stt_models:/models
     restart: unless-stopped

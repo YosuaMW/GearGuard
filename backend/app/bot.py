@@ -207,6 +207,9 @@ async def handle(pool, c, msg):
     if text.startswith("/start") or text.startswith("/help"):
         await send(c, chat_id, HELP)
         return
+    if text.startswith("/"):
+        await send(c, chat_id, "Unknown command. Use /status or /help.")
+        return
 
     reply = msg.get("reply_to_message")
     if not reply:
