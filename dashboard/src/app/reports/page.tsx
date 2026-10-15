@@ -9,6 +9,7 @@ import { useCallback, useState } from "react";
 import { StateTimeline } from "@/components/StateTimeline";
 import { api } from "@/lib/api";
 import { duration, pct } from "@/lib/format";
+import { averageLead, leadText } from "@/lib/leadtime";
 import { maintenanceByMachine, unplannedMinutes } from "@/lib/maintenance";
 import { usePlant } from "@/lib/plant";
 import { rupiah, setPrefs, usePrefs } from "@/lib/prefs";
@@ -114,6 +115,7 @@ export default function ReportsPage() {
   const lineMachines = live?.map((m) => ({ id: m.id, name: m.name })) ?? machines.map((m) => ({ id: m.machine_id, name: m.machine_name }));
   const maint = avail && win && events ? maintenanceByMachine(events, avail) : [];
   const unplanned = win ? unplannedMinutes(avail) : null;
+  const lead = win ? averageLead(alerts, events) : null;
 
   return (
     <div className="space-y-5">
@@ -186,6 +188,13 @@ export default function ReportsPage() {
                   Unplanned downtime cost{" "}
                   <span className="font-medium text-ink">{rupiah(unplanned * costPerMin)}</span> in this period (
                   {Math.round(unplanned)} min).{" "}
+                </>
+              )}
+              {lead && (
+                <>
+                  Alerts warned on average{" "}
+                  <span className="font-medium text-steel">{leadText(lead.avg)} before the stop</span> ({lead.count}{" "}
+                  {lead.count === 1 ? "alert" : "alerts"}).{" "}
                 </>
               )}
               Breakdowns are stops for mechanical, electrical or overheat reasons.

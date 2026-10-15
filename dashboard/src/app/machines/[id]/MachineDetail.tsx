@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Evidence, sourceText } from "@/components/AlertPanel";
+import { AlertExplanation } from "@/components/AlertPanel";
 import { EventList } from "@/components/EventList";
 import { condition } from "@/components/MachineStatus";
 import { TrendChart } from "@/components/TrendChart";
@@ -62,11 +62,9 @@ export function MachineDetail({ id }: { id: string }) {
       {active && (
         <section className="rounded-xl border border-warn bg-warn-tint/60 p-4">
           <h2 className="font-semibold text-warn">{active.title}</h2>
-          <p className="mt-1.5 max-w-[75ch] text-sm leading-relaxed">{active.explanation}</p>
-          <Evidence alert={active} />
-          {active.sources.length > 0 && (
-            <p className="mt-2 text-xs text-ink-2">Check: {active.sources.map(sourceText).join("; ")}</p>
-          )}
+          <div className="max-w-[80ch]">
+            <AlertExplanation alert={active} />
+          </div>
         </section>
       )}
 

@@ -152,19 +152,16 @@ function raiseAlert(atMs: number) {
     active: true,
     score: 0.63,
     title: "Vibration rising above normal",
+    // Like the real backend: rule text first, the LLM explanation ~25 s later.
     explanation:
-      "Vibration has climbed steadily over the last minutes while current stays flat, a typical sign of bearing wear. Check bearing noise and temperature, bolt tightness and lubrication before the next shift.",
-    explanation_source: "ai",
-    sources: [
-      { title: "Centrifugal pump manual", page: 42 },
-      { title: "Repair log, pump seal (Sep 2026)", page: 1 },
-    ],
+      "Vibration is above its normal level, a typical sign of bearing wear, imbalance or loose mounting bolts. Check bearing noise and temperature, bolt tightness and lubrication.",
+    explanation_source: "rules",
+    sources: [],
     features: {
       vib_rms: { label: "Vibration", unit: "g RMS", now: 0.62, normal: 0.4, z: 4.1, pct: 55 },
       temp_c: { label: "Temperature", unit: "°C", now: 50.9, normal: 45.3, z: 3.2, pct: 12.4 },
     },
   });
-  state.aiCalls.explain++;
 }
 
 function resolveAlerts(id: string, atMs: number) {
@@ -229,6 +226,18 @@ function advance() {
   state.tick = target;
   // keep open stops' duration fresh
   for (const e of state.events) if (e.ongoing) e.duration_s = Math.round((now - Date.parse(e.start_ts)) / 1000);
+  for (const a of state.alerts) {
+    if (a.explanation_source === "rules" && a.active && now - Date.parse(a.ts) > 25_000) {
+      a.explanation_source = "ai";
+      a.explanation =
+        "Vibration RMS has risen about 55% above this pump's baseline while motor current is unchanged, so the load is not the cause. Together with the slow temperature rise, this points to early bearing wear on the drive end.\n\nRecommended: listen for grinding at the bearing housing, check grease level, and plan a bearing inspection at the next changeover before the vibration reaches the trip level.";
+      a.sources = [
+        { title: "Pump user manual", page: 46, snippet: "Bearing maintenance and lubrication intervals" },
+        { title: "Repair log, pump seal (Sep 2026)", page: 1 },
+      ];
+      state.aiCalls.explain++;
+    }
+  }
   state.events = state.events.slice(0, 200);
   state.alerts = state.alerts.slice(0, 50);
 }

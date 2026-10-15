@@ -34,12 +34,17 @@ Optional: `NEXT_PUBLIC_DOWNTIME_COST_PER_MIN` sets the default cost of one minut
 
 ## Features
 
-- **Overview**: line diagram, shift KPIs with downtime cost, machine cards with live vibration, predictive alerts, today's events
+- **Overview**: line diagram, shift KPIs with downtime cost, machine cards with live vibration, predictive alerts
+  (full explanation, "AI · Qwen on AMD" or "Rule-based" badge, manual pages to check), today's events with voice-note
+  transcripts and "Needs review" marks
 - **Machines**: current, vibration and temperature with alert limits; stops and operator answers per machine
 - **Reports**: state timeline per machine (running, anomaly, unplanned stop, scheduled break), downtime Pareto,
   availability, and a maintenance table with downtime cost, breakdowns, MTTR and MTBF
   (breakdown = stop for a mechanical, electrical or overheat reason)
-- **Running on AMD**: calls, latency and success rate of each AI step
+- **Running on AMD**: where each AI step runs (Whisper on the Raspberry Pi, Qwen on AMD Token Factory), with calls,
+  latency and success rate
+- **Lead time**: an alert followed by a stop shows "warned 85 s before the stop"; Reports shows the average.
+  Computed in the browser from `/alerts` and `/events`
 - **Notifications**: a notice for every new alert, stop and operator answer; the bell in the header turns on a sound
 
 ## Backend contract
@@ -75,6 +80,7 @@ src/lib/mock.ts       browser simulator, used when NEXT_PUBLIC_API_URL is empty
 src/lib/plant.tsx     polls machines/telemetry/alerts/events/summary once for the whole app
 src/lib/maintenance.ts  MTTR / MTBF / unplanned downtime calculations
 src/lib/prefs.ts      per-browser settings (downtime cost, sound)
+src/lib/leadtime.ts   how long before a stop each alert warned
 src/app/page.tsx      Overview
 src/app/machines/     Machine detail (ids listed in generateStaticParams)
 src/app/reports/      Pareto and availability

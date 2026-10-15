@@ -5,7 +5,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { api } from "./api";
-import type { Alert, Machine, StopEvent, Summary, TelemetryResponse } from "./types";
+import type { AiUsage, Alert, Machine, StopEvent, Summary, TelemetryResponse } from "./types";
 import { usePolling } from "./usePolling";
 
 interface PlantData {
@@ -14,6 +14,8 @@ interface PlantData {
   alerts: Alert[] | null; // active + raised today
   events: StopEvent[] | null; // today, newest first
   summary: Summary | null;
+  /** Model behind /explain, e.g. "Qwen3.8-27B", once the backend has really used it. */
+  explainModel: string | null;
   error: string | null;
   lastOk: number | null;
 }
@@ -31,6 +33,7 @@ export function PlantProvider({ children }: { children: ReactNode }) {
   const alerts = usePolling(fetchAlerts, 2000);
   const events = usePolling(fetchEvents, 2000);
   const summary = usePolling(fetchSummary, 5000);
+  const usage = usePolling(api.aiUsage, 30_000);
 
   return (
     <PlantContext.Provider
@@ -40,6 +43,7 @@ export function PlantProvider({ children }: { children: ReactNode }) {
         alerts: alerts.data,
         events: events.data,
         summary: summary.data,
+        explainModel: explainModel(usage.data),
         error: machines.error,
         lastOk: machines.lastOk,
       }}
@@ -53,4 +57,9 @@ export function usePlant() {
   const ctx = useContext(PlantContext);
   if (!ctx) throw new Error("usePlant must be used inside <PlantProvider>");
   return ctx;
+}
+
+function explainModel(u: AiUsage | null) {
+  const row = u?.endpoints.find((e) => e.endpoint === "/explain");
+  return row && row.mock === false && row.model ? row.model : null;
 }

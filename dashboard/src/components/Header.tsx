@@ -75,11 +75,20 @@ export function Header() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-4 text-sm">
+        <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span className="flex items-center gap-1.5 text-ink-2" title={error ?? undefined}>
             <span className={`h-2 w-2 rounded-full ${badge.dot}`} aria-hidden="true" />
             {badge.text}
           </span>
+          {summary?.ai_mode === "amd" && !error && !stale && (
+            <Link
+              href="/amd/"
+              className="rounded bg-steel/10 px-2 py-0.5 text-xs font-medium text-steel hover:bg-steel/15"
+              title="Classification and alert explanations run on AMD Token Factory"
+            >
+              AI: AMD
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => setPrefs({ sound: !sound })}
