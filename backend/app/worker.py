@@ -9,7 +9,8 @@ from dotenv import load_dotenv, find_dotenv
 
 from app.anomaly import Scorer
 from app import db
-from app.notify import ask_reason, send_alert, send_resolved
+from app.notify import ask_reason, send_alert, send_resolved, send_explanation
+from app import ai
 
 load_dotenv(find_dotenv())
 
@@ -18,6 +19,8 @@ STOP_A = float(os.getenv("STOP_CURRENT_A", "0.3"))
 STOP_SEC = int(os.getenv("STOP_SECONDS", "5"))
 GAP_S = int(os.getenv("DATA_GAP_SECONDS", "30"))   # data putus lebih lama dari ini = event ditutup
 NOTIFY_SOURCES = set(os.getenv("ALERT_NOTIFY_SOURCES", "live,replay").split(","))
+EXPLAIN_SOURCES = set(os.getenv("EXPLAIN_SOURCES", "live,replay").split(","))
+_bg = set()   # referensi task latar belakang supaya tidak dibuang garbage collector
 
 state = {}
 last_ts = {}
@@ -98,8 +101,43 @@ async def notify_alert(c, mid, source, aid, ts, r):
         if msg_id:
             await c.execute("UPDATE alerts SET tg_message_id = $1 WHERE id = $2", msg_id, aid)
             print(f"[TELEGRAM] alert {aid} terkirim ({mid})")
+            return msg_id
     except Exception as e:
         print("Gagal kirim alert Telegram:", e)
+
+
+async def explain_alert(pool, mid, source, aid, ts, r, msg_id):
+    """Minta penjelasan AI untuk alert baru; tidak memblokir loop MQTT."""
+    try:
+        async with pool.acquire() as c:
+            name = await machine_name(c, mid)
+            evs = await c.fetch(
+                """SELECT start_ts, category, transcript FROM events
+                   WHERE machine_id = $1 AND category IS NOT NULL AND start_ts > now() - interval '7 days'
+                   ORDER BY start_ts DESC LIMIT 5""", mid)
+        payload = {
+            "alert_id": aid, "machine_id": mid, "machine_name": name, "ts": ts.isoformat(),
+            "score": round(float(r["score"]), 3),
+            "features": {f: {"now": round(float(r["mean"][f]), 3),
+                             "normal": round(float(r["base"][f]["median"]), 3),
+                             "z": round(float(r["z"][f]), 2)} for f in r["z"]},
+            "recent_events": [{"ts": e["start_ts"].isoformat(), "category": e["category"],
+                               "transcript": e["transcript"]} for e in evs],
+        }
+        data = await ai.explain(pool, payload)
+        if not data:
+            await asyncio.sleep(20)
+            data = await ai.explain(pool, payload)
+        if not data or not data.get("summary"):
+            return
+        async with pool.acquire() as c:
+            await c.execute("UPDATE alerts SET explanation = $1, sources = $2 WHERE id = $3",
+                            data["summary"], json.dumps(data.get("sources") or []), aid)
+        print(f"[AI] alert {aid} dijelaskan ({len(data.get('sources') or [])} sumber)")
+        if msg_id and source in NOTIFY_SOURCES:
+            await send_explanation(name, aid, data, reply_to=msg_id)
+    except Exception as e:
+        print("Gagal menjelaskan alert:", e)
 
 
 async def notify_resolved(c, mid, source, ids):
@@ -173,7 +211,11 @@ async def handle(pool, data):
                         mid, ts, score, json.dumps({f: {"now": r["mean"][f], "normal": r["base"][f]["median"], "z": r["z"][f]} for f in r["z"]}),
                     )
                     print(f"[ANOMALI] {mid} alert {aid}, z={r['z']}")
-                    await notify_alert(c, mid, source, aid, ts, r)
+                    msg_id = await notify_alert(c, mid, source, aid, ts, r)
+                    if source in EXPLAIN_SOURCES and not ai.is_mock():
+                        t = asyncio.create_task(explain_alert(pool, mid, source, aid, ts, r, msg_id))
+                        _bg.add(t)
+                        t.add_done_callback(_bg.discard)
                 elif anomaly:
                     await c.execute(
                         """UPDATE alerts SET score = GREATEST(score, $1), features = $2

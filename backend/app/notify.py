@@ -8,7 +8,7 @@ WIB = ZoneInfo("Asia/Jakarta")
 LABELS = {"current_a": ("Current", "A"), "vib_rms": ("Vibration", ""), "temp_c": ("Temperature", "°C")}
 
 
-async def _send(text, force_reply=False):
+async def _send(text, force_reply=False, reply_to=None):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat:
@@ -17,6 +17,8 @@ async def _send(text, force_reply=False):
     body = {"chat_id": chat, "text": text, "parse_mode": "HTML"}
     if force_reply:
         body["reply_markup"] = {"force_reply": True}
+    if reply_to:
+        body["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
     async with httpx.AsyncClient(timeout=10) as c:
         r = await c.post(f"https://api.telegram.org/bot{token}/sendMessage", json=body)
         r.raise_for_status()
@@ -78,3 +80,23 @@ async def send_alert(machine_name, alert_id, ts, r):
 async def send_resolved(machine_name, alert_ids):
     ids = ", ".join(f"#{i}" for i in alert_ids)
     return await _send(f"✅ <b>{html.escape(machine_name)}</b> is back to normal\n<i>alert {ids} closed</i>")
+
+
+async def send_explanation(machine_name, alert_id, data, reply_to=None):
+    acts = "\n".join(f"• {html.escape(str(a))}" for a in (data.get("actions") or [])[:5])
+    srcs = []
+    for s in (data.get("sources") or [])[:3]:
+        t = html.escape(s.get("title") or "source")
+        if s.get("page"):
+            t += f", p. {s['page']}"
+        srcs.append(f"📖 {t}")
+    model = (data.get("usage") or {}).get("model") or "AI"
+    text = f"🤖 <b>AI analysis · {html.escape(machine_name)}</b>\n\n{html.escape(data.get('summary', ''))}\n"
+    if acts:
+        text += f"\n<b>Actions</b>\n{acts}\n"
+    if data.get("urgency"):
+        text += f"\n<b>Urgency:</b> {html.escape(str(data['urgency']))}\n"
+    if srcs:
+        text += "\n<b>Sources</b>\n" + "\n".join(srcs) + "\n"
+    text += f"\n<i>alert #{alert_id} · {html.escape(model)} on AMD</i>"
+    return await _send(text, reply_to=reply_to)

@@ -109,3 +109,21 @@ async def classify(pool, text, machine_id):
         await _log(pool, "classify", started, False, error=str(e))
         print("Classify AMD gagal, pakai kata kunci:", e)
         return classify_rules(text)
+
+
+async def explain(pool, payload):
+    """POST /explain -> dict (summary, actions, urgency, sources, usage) atau None (mock / gagal)."""
+    if is_mock():
+        return None
+    started = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=70) as c:
+            r = await c.post(f"{_base()}/explain", headers=_headers(), json=payload)
+        r.raise_for_status()
+        data = r.json()
+        await _log(pool, "explain", started, True, usage=data.get("usage"))
+        return data
+    except Exception as e:
+        await _log(pool, "explain", started, False, error=str(e))
+        print("Explain gagal:", e)
+        return None
