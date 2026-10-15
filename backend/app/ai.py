@@ -94,7 +94,7 @@ async def classify(pool, text, machine_id):
         await _log(pool, "classify", started, True, mock=True)
         return result
     try:
-        async with httpx.AsyncClient(timeout=20) as c:
+        async with httpx.AsyncClient(timeout=30) as c:
             r = await c.post(f"{_base()}/classify", headers=_headers(),
                              json={"text": text, "machine_id": machine_id})
         r.raise_for_status()

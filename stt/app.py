@@ -27,5 +27,5 @@ def transcribe(file: UploadFile = File(...), language: str = Form("id"), authori
         audio = load_audio(file.file.read())
     except subprocess.CalledProcessError:
         raise HTTPException(415, "cannot decode audio")
-    segs, _ = model.transcribe(audio, language=language or "id", beam_size=1, vad_filter=True)
+    segs, _ = model.transcribe(audio, language=language or "id", beam_size=1, vad_filter=True, initial_prompt="Operator pabrik melaporkan alasan mesin berhenti: bearing, motor, belt, oli, panas, overheat, korslet, MCB, teknisi, material, gudang, ganti produk, setting, istirahat, makan siang.")
     return {"text": " ".join(s.text.strip() for s in segs)}
