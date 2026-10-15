@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     await app.state.pool.close()
 
 
-app = FastAPI(title="SiagaMesin API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="GearGuard API", version="0.2.0", lifespan=lifespan)
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET"], allow_headers=["*"])

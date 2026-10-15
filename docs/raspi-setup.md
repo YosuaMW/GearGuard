@@ -1,6 +1,6 @@
 # Raspberry Pi · Backend Setup & Operations
 
-Guide for role 2 (and their backup, role 4) to set up and run the SiagaMesin backend.
+Guide for role 2 (and their backup, role 4) to set up and run the GearGuard backend.
 Everything runs with **Docker Compose**, so the same steps also work on a laptop or VPS.
 
 ## System overview
@@ -21,7 +21,7 @@ Hardware: Raspberry Pi 4B 4 GB, Debian 13 (trixie) 64-bit, hostname `yosua`.
 ## Folder layout
 
 ```
-SiagaMesin/
+GearGuard/
 ├── .env                  # secrets, NOT committed (copy from .env.example)
 ├── .env.example
 ├── Dockerfile            # one Python image for api, worker, bot, sim

@@ -1,5 +1,5 @@
 [Unit]
-Description=SiagaMesin simulator (mesin replay)
+Description=GearGuard simulator (mesin replay)
 After=mosquitto.service siagamesin-worker.service
 
 [Service]

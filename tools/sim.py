@@ -1,4 +1,4 @@
-"""Simulator mesin SiagaMesin.
+"""Simulator mesin GearGuard.
 
 Perintah lewat MQTT (topic siagamesin/sim/cmd), contoh:
   docker compose exec mqtt mosquitto_pub -t siagamesin/sim/cmd -m "wear m2"

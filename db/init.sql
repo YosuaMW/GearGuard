@@ -1,4 +1,4 @@
--- Skema lengkap SiagaMesin (gabungan semua ALTER sampai 13 Okt 2026).
+-- Skema lengkap GearGuard (gabungan semua ALTER sampai 13 Okt 2026).
 -- Untuk instalasi baru: psql "$DATABASE_URL" -f db/init.sql
 
 CREATE TABLE IF NOT EXISTS machines (

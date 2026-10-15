@@ -24,7 +24,7 @@ WIB = ZoneInfo("Asia/Jakarta")
 WARN_SCORE = 0.5
 
 HELP = (
-    "<b>SiagaMesin Bot</b>\n\n"
+    "<b>GearGuard Bot</b>\n\n"
     "• When a machine stops, I'll ask why. <b>Reply</b> to that message with text or a voice note.\n"
     "• When a machine shows abnormal signs, I'll send an <b>EARLY WARNING</b>.\n"
     "• /status shows the current condition of all machines."

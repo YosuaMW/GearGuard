@@ -1,9 +1,9 @@
-# SiagaMesin
+# GearGuard
 
 **Log why machines stop, then learn to keep them from stopping again.**
 AMD Developer Hackathon ACT III · Track: Intelligent Industry
 
-SiagaMesin monitors legacy factory machines through current, vibration and temperature sensors. When a machine stops, the operator is asked why on Telegram (text or voice note). When the sensor pattern starts drifting, the system sends an early warning before the machine fails.
+GearGuard monitors legacy factory machines through current, vibration and temperature sensors. When a machine stops, the operator is asked why on Telegram (text or voice note). When the sensor pattern starts drifting, the system sends an early warning before the machine fails.
 
 ## Architecture
 

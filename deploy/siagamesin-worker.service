@@ -1,5 +1,5 @@
 [Unit]
-Description=SiagaMesin worker (MQTT -> DB, deteksi berhenti & anomali)
+Description=GearGuard worker (MQTT -> DB, deteksi berhenti & anomali)
 After=network-online.target postgresql.service mosquitto.service
 Wants=network-online.target
 

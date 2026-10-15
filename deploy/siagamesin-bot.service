@@ -1,5 +1,5 @@
 [Unit]
-Description=SiagaMesin Telegram bot
+Description=GearGuard Telegram bot
 After=network-online.target postgresql.service
 Wants=network-online.target
 

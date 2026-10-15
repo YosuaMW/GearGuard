@@ -1,5 +1,5 @@
 [Unit]
-Description=SiagaMesin API (FastAPI)
+Description=GearGuard API (FastAPI)
 After=network-online.target postgresql.service
 Wants=network-online.target
 

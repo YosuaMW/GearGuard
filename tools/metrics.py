@@ -58,7 +58,7 @@ async def main(hours, live_only):
     await c.close()
 
     scope = "live machines only" if live_only else "all machines (live rig + replay simulator)"
-    print(f"\n=== SiagaMesin metrics · last {hours} h · {scope} ===\n")
+    print(f"\n=== GearGuard metrics · last {hours} h · {scope} ===\n")
 
     print("DOWNTIME LOGGING")
     print(f"  Stops detected automatically : {ev['stops']}")

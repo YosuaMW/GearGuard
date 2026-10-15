@@ -1,6 +1,6 @@
 # Role 1 · Hardware & Anomaly Model
 
-How to connect the ESP32 and sensors to the SiagaMesin backend on the Raspberry Pi.
+How to connect the ESP32 and sensors to the GearGuard backend on the Raspberry Pi.
 
 > To agree on: see [integration-checklist.md](integration-checklist.md) items 4–5 (both optional).
 

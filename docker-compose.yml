@@ -1,4 +1,4 @@
-# Jalankan seluruh SiagaMesin dengan satu perintah:  docker compose up -d --build
+# Jalankan seluruh GearGuard dengan satu perintah:  docker compose up -d --build
 # Butuh file .env (salin dari .env.example). DATABASE_URL & MQTT_HOST diatur otomatis di bawah.
 
 x-app: &app
