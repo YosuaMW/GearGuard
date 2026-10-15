@@ -23,8 +23,10 @@ export const STATE_COLORS = {
   planned: "#8796a8",
 };
 
+const KINDS = ["running", "anomaly", "stopped", "planned"] as const;
+
 interface Bar {
-  value: [number, number, number];
+  value: [number, number, number, number]; // row, start, end, kind index
   itemStyle: { color: string };
   kind: keyof typeof STATE_COLORS;
   text: string;
@@ -49,13 +51,13 @@ export function StateTimeline({ machines, events, alerts, start, end }: Props) {
     const clip = (a: number, b: number) => [Math.max(a, t0), Math.min(b, t1)] as const;
 
     machines.forEach((m, i) =>
-      bars.push({ value: [i, t0, t1], itemStyle: { color: STATE_COLORS.running }, kind: "running", text: "Running", z: 0 }),
+      bars.push({ value: [i, t0, t1, 0], itemStyle: { color: STATE_COLORS.running }, kind: "running", text: "Running", z: 0 }),
     );
     for (const a of alerts) {
       const i = row.get(a.machine_id);
       if (i == null) continue;
       const [s, e] = clip(Date.parse(a.ts), a.resolved_ts ? Date.parse(a.resolved_ts) : t1);
-      if (e > s) bars.push({ value: [i, s, e], itemStyle: { color: STATE_COLORS.anomaly }, kind: "anomaly", text: a.title, z: 1 });
+      if (e > s) bars.push({ value: [i, s, e, 1], itemStyle: { color: STATE_COLORS.anomaly }, kind: "anomaly", text: a.title, z: 1 });
     }
     for (const ev of events) {
       const i = row.get(ev.machine_id);
@@ -67,7 +69,7 @@ export function StateTimeline({ machines, events, alerts, start, end }: Props) {
       const planned = ev.category_id === "break";
       const text = ev.has_reason ? (ev.category ?? "Stopped") : ev.awaiting_reason ? "Stopped, waiting for operator" : "Stopped, no reason";
       bars.push({
-        value: [i, s, Math.max(e, s + (t1 - t0) / 400)], // keep very short stops visible
+        value: [i, s, Math.max(e, s + (t1 - t0) / 400), planned ? 3 : 2], // keep very short stops visible
         itemStyle: { color: planned ? STATE_COLORS.planned : STATE_COLORS.stopped },
         kind: planned ? "planned" : "stopped",
         text,
@@ -114,6 +116,9 @@ export function StateTimeline({ machines, events, alerts, start, end }: Props) {
         {
           type: "custom",
           encode: { x: [1, 2], y: 0 },
+          // No hover highlight: it would lift a bar above the stops drawn on top of it.
+          emphasis: { disabled: true },
+          blur: { itemStyle: { opacity: 1 } },
           data: bars,
           renderItem: (
             params: { coordSys: { x: number; y: number; width: number; height: number } },
@@ -132,7 +137,9 @@ export function StateTimeline({ machines, events, alerts, start, end }: Props) {
               { x: a[0], y: a[1] - h / 2, width: Math.max(b[0] - a[0], 1), height: h },
               params.coordSys,
             );
-            return shape && { type: "rect", shape: { ...shape, r: 2 }, style: api.style() };
+            const running = KINDS[api.value(3)] === "running";
+            // The grey "running" background never reacts to the cursor, so it can't cover a stop.
+            return shape && { type: "rect", shape: { ...shape, r: 2 }, style: api.style(), silent: running };
           },
         },
       ],
@@ -141,7 +148,7 @@ export function StateTimeline({ machines, events, alerts, start, end }: Props) {
 
   return (
     <div>
-      <ReactEChartsCore echarts={echarts} option={option} notMerge style={{ height: 40 + machines.length * 44 }} />
+      <ReactEChartsCore echarts={echarts} option={option} lazyUpdate style={{ height: 40 + machines.length * 44 }} />
       <ul className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-2">
         {(
           [
