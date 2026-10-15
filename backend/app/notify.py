@@ -85,11 +85,13 @@ async def send_resolved(machine_name, alert_ids):
 async def send_explanation(machine_name, alert_id, data, reply_to=None):
     acts = "\n".join(f"• {html.escape(str(a))}" for a in (data.get("actions") or [])[:5])
     srcs = []
-    for s in (data.get("sources") or [])[:3]:
+    for s in (data.get("sources") or []):
         t = html.escape(s.get("title") or "source")
         if s.get("page"):
             t += f", p. {s['page']}"
-        srcs.append(f"📖 {t}")
+        if f"📖 {t}" not in srcs:
+            srcs.append(f"📖 {t}")
+    srcs = srcs[:3]
     model = (data.get("usage") or {}).get("model") or "AI"
     text = f"🤖 <b>AI analysis · {html.escape(machine_name)}</b>\n\n{html.escape(data.get('summary', ''))}\n"
     if acts:

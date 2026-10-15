@@ -222,7 +222,7 @@ sed -i "s|^RADEON_API_KEY=.*|RADEON_API_KEY=$RK|; s|^AI_SERVICE_KEY=.*|AI_SERVIC
 for k in AI_BASE_URL AI_API_KEY STT_API_KEY; do grep -q "^$k=" .env || echo "$k=" >> .env; done
 sed -i "s|^AI_BASE_URL=.*|AI_BASE_URL=http://ai:8001|; s|^AI_API_KEY=.*|AI_API_KEY=$SK|; s|^STT_API_KEY=.*|STT_API_KEY=$WK|" .env
 unset RK SK WK
-mkdir -p AI/manuals            # PDF manuals for /explain sources (optional)
+mkdir -p AI/manuals            # PDF manuals for /explain sources; map them per machine with MANUAL_MAP in AI/.env
 docker compose up -d --build
 docker compose logs bot --tail 3      # should say: (AI: AMD)
 ```

@@ -5,6 +5,7 @@ Bila LLM gagal, endpoint mengembalikan error (502) agar backend mempertahankan p
 berbasis aturannya (docs/role3-ai.md: "If it fails, the existing rule-based explanation is kept").
 """
 import json
+import os
 import logging
 import re
 import time
@@ -107,7 +108,13 @@ class Explainer:
 
     def retrieve(self, body: ExplainIn) -> list[tuple[str, SourceRef]]:
         q = build_query(body)
-        hits = self.index.search(q, k=self.s.rag_top_k, kind="manual") + self.index.search(q, k=2, kind="riwayat")
+        manual = self.index.search(q, k=100000, kind="manual")
+        # MANUAL_MAP="m1=Motor.pdf,m2=Pump.pdf": hanya kutip manual milik mesin itu (mesin tanpa manual = tanpa kutipan manual)
+        mmap = dict(x.strip().split("=", 1) for x in os.getenv("MANUAL_MAP", "").split(",") if "=" in x)
+        if mmap:
+            want = mmap.get(body.machine_id)
+            manual = [h for h in manual if h[0].source == want] if want else []
+        hits = manual[: self.s.rag_top_k] + self.index.search(q, k=2, kind="riwayat")
         out = []
         for n, (chunk, _score) in enumerate(hits, 1):
             snippet = " ".join(chunk.text.split())[:500]
