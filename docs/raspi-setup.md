@@ -13,6 +13,8 @@ Everything runs with **Docker Compose**, so the same steps also work on a laptop
 | `worker` | container | – | – |
 | `bot` Telegram | container | – | – |
 | `sim` simulator (m2–m4) | container (profile `sim`) | – | – |
+| `ai` AI service (role 3) | container | 8001 | inside Docker only |
+| `stt` Whisper speech-to-text | container | 9000 | inside Docker only |
 | Tailscale Funnel | system service | 443 → 8000, 8443 → 1883 | internet (HTTPS API, MQTT over TLS) |
 
 All containers use `restart: unless-stopped`: they start on boot and restart themselves if they crash.
@@ -35,8 +37,10 @@ GearGuard/
 │       ├── anomaly.py    # z-score anomaly scoring
 │       ├── notify.py     # Telegram messages (stop questions, early warnings)
 │       ├── bot.py        # operator answers, /status
-│       ├── ai.py         # AMD client for /transcribe, /classify (+ mock mode)
+│       ├── ai.py         # client for the AI service: /transcribe, /classify, /explain (+ mock mode)
 │       └── db.py         # database connection that waits for the DB to be ready
+├── AI/                  # role 3 AI service: /transcribe, /classify, /explain (+ AI/.env, NOT committed)
+├── stt/                 # Whisper speech-to-text on the Pi (faster-whisper, CPU)
 ├── db/init.sql           # full schema (runs automatically when the DB is first created)
 ├── deploy/               # mosquitto.conf, passwd (MQTT logins, NOT committed) (+ old systemd files, unused)
 ├── tools/
@@ -99,7 +103,7 @@ sed -i "s/^MQTT_PASSWORD=.*/MQTT_PASSWORD=$P/" .env
 docker compose up -d --build
 docker compose ps
 ```
-The first build takes ~2–10 minutes. Five services (`db`, `mqtt`, `api`, `worker`, `bot`) should be **Up**.
+The first build takes ~2–10 minutes (the `ai` and `stt` images install ffmpeg, which is slow on a Pi). Seven services (`db`, `mqtt`, `api`, `worker`, `bot`, `ai`, `stt`) should be **Up**; start the simulator separately (section B). On first start `stt` downloads the Whisper model (~150 MB for `base`), so give it a minute.
 
 ### 6. Tailscale Funnel (public API + MQTT)
 ```
@@ -139,11 +143,17 @@ All from `~/hackathon/siagamesin`.
 | Stop everything | `docker compose down` (database data stays in the volume) |
 | Start everything | `docker compose up -d` |
 | Apply `.env` changes | `docker compose up -d --force-recreate worker bot api` |
+| Apply `AI/.env` changes | `docker compose up -d --force-recreate ai` |
+| AI service log | `docker compose logs --tail 30 ai \| grep -v health` |
 
 The **simulator** is in profile `sim`, so `docker compose up -d` alone doesn't start it. Once started, **leave it running and it comes back after every reboot** (`restart: unless-stopped`). Only `docker compose stop sim` keeps it off.
 **From Friday (deploy) until judging ends, the simulator must be running**, so the dashboard isn't empty when judges open it.
 
 **Which early warnings go to Telegram:** `ALERT_NOTIFY_SOURCES` in `.env`. `live` = only the real rig (quiet, default); `live,replay` = m2–m4 too (for demos). Apply with `docker compose up -d --force-recreate worker`. Stop questions are only asked for `live` machines either way.
+
+**Which alerts get an AI explanation:** `EXPLAIN_SOURCES` in `.env` (default `live,replay`). `/explain` takes up to ~50 s and shares the team's Token Factory quota, so `live` keeps AMD free for operator answers; switch to `live,replay` when demoing early warnings on m2–m4. Apply with `docker compose up -d --force-recreate worker`.
+
+**Voice note language:** `STT_LANGUAGE` in `.env`: `en`, `id`, or empty for auto-detect. Apply with `docker compose up -d stt`.
 
 **MQTT commands need the login.** Load it once per terminal with `source .env`, then add `-u siaga -P "$MQTT_PASSWORD"` to every `mosquitto_sub` / `mosquitto_pub`.
 
@@ -172,7 +182,9 @@ The **simulator** is in profile `sim`, so `docker compose up -d` alone doesn't s
 | Local API | `curl -s localhost:8000/health` | `"status":"ok"` |
 | Public API | `https://yosua.tailf140ab.ts.net/health` | `"status":"ok"` |
 | All endpoints | `https://yosua.tailf140ab.ts.net/docs` | Swagger lists every endpoint |
-| Containers | `docker ps --format "table {{.Names}}\t{{.Status}}"` | 6 **Up** (incl. `sim`), `db` **healthy** |
+| Containers | `docker ps --format "table {{.Names}}\t{{.Status}}"` | 8 **Up** (incl. `sim`, `ai`, `stt`), `db` and `ai` **healthy** |
+| AI mode | `curl -s localhost:8000/summary \| grep -o '"ai_mode":"[a-z]*"'` | `"ai_mode":"amd"` |
+| Speech-to-text | `docker compose exec stt python -c "import urllib.request;print(urllib.request.urlopen('http://localhost:9000/health').read().decode())"` | `"ok":true` + model + language |
 | MQTT traffic | `docker compose exec mqtt mosquitto_sub -u siaga -P "$MQTT_PASSWORD" -t "siagamesin/#" -v` | A message every second |
 | MQTT login enforced | `docker compose exec mqtt mosquitto_sub -t "#" -C 1 -W 3` | `not authorised` |
 | Bot | send `/status` on Telegram | All machines listed |
@@ -189,23 +201,51 @@ watch -n 2 'docker compose exec -T db psql -U siaga -d siagamesin -c "SELECT mac
 docker compose exec -T db psql -U siaga -d siagamesin -c "SELECT a.id, a.machine_id, a.ts::time(0) AS alert, e.start_ts::time(0) AS stopped, round(extract(epoch FROM e.start_ts - a.ts)) AS lead_s, e.category FROM alerts a LEFT JOIN LATERAL (SELECT start_ts, category FROM events WHERE machine_id = a.machine_id AND start_ts >= a.ts ORDER BY start_ts LIMIT 1) e ON true ORDER BY a.id DESC LIMIT 10;"
 ```
 
-## D. Connecting role 3's AI
+## D. AI (role 3) and speech-to-text
 
-While `AI_BASE_URL` is empty, the bot runs in **mock mode**: voice notes get a sample transcript and categories come from keywords. Once role 3 sends the URL and API key:
 ```
-grep -q "^AI_BASE_URL=" .env || echo "AI_BASE_URL=" >> .env
-grep -q "^AI_API_KEY=" .env || echo "AI_API_KEY=" >> .env
-sed -i "s|^AI_BASE_URL=.*|AI_BASE_URL=https://address-from-role3|" .env
-read -s -p "Paste API key: " K && sed -i "s|^AI_API_KEY=.*|AI_API_KEY=$K|" .env && unset K && echo
-docker compose up -d
+bot / worker ──► ai (container, :8001) ──► AMD Token Factory: Qwen3.8-27B   (/classify, /explain)
+                     │
+                     └──► stt (container, :9000): Whisper on the Pi CPU    (/transcribe)
+```
+
+- Role 3's AI service lives in `AI/` and runs on the Pi as the `ai` container. It needs no GPU: it calls AMD Token Factory over the internet.
+- Token Factory has no working audio model (every audio request is rejected by the gateway), so `/transcribe` uses Whisper in the `stt` container. Switching to Whisper on an AMD GPU later only means changing `WHISPER_BASE_URL` in `AI/.env`.
+- The backend talks to `ai` with an internal key; the Token Factory key (`rc-...`) only lives in `AI/.env`.
+
+**Setup** (once):
+```
+cp AI/.env.example AI/.env && chmod 600 AI/.env
+read -s -p "Token Factory key (rc-...): " RK; echo
+SK=$(openssl rand -hex 24); WK=$(openssl rand -hex 16)
+sed -i "s|^RADEON_API_KEY=.*|RADEON_API_KEY=$RK|; s|^AI_SERVICE_KEY=.*|AI_SERVICE_KEY=$SK|; s|^WHISPER_API_KEY=.*|WHISPER_API_KEY=$WK|" AI/.env
+for k in AI_BASE_URL AI_API_KEY STT_API_KEY; do grep -q "^$k=" .env || echo "$k=" >> .env; done
+sed -i "s|^AI_BASE_URL=.*|AI_BASE_URL=http://ai:8001|; s|^AI_API_KEY=.*|AI_API_KEY=$SK|; s|^STT_API_KEY=.*|STT_API_KEY=$WK|" .env
+unset RK SK WK
+mkdir -p AI/manuals            # PDF manuals for /explain sources (optional)
+docker compose up -d --build
 docker compose logs bot --tail 3      # should say: (AI: AMD)
 ```
-If the AMD endpoint errors or is down, classification falls back to keywords so the flow never stalls.
+Empty `AI_BASE_URL` in `.env` = **mock mode** (sample transcript + keyword rules), useful when AMD is unavailable.
+
+**Test each step:**
+```
+# classify (Qwen on AMD)
+docker compose exec bot python -c "import os,httpx;r=httpx.post(os.environ['AI_BASE_URL']+'/classify',headers={'Authorization':'Bearer '+os.environ['AI_API_KEY']},json={'text':'waiting for material from the warehouse','machine_id':'m1'},timeout=40);print(r.status_code,r.text[:300])"
+# transcribe (Whisper on the Pi), using a saved voice note
+docker compose exec bot python -c "import os,glob,httpx;f=sorted(glob.glob('/app/data/voice/*.ogg'))[-1];r=httpx.post(os.environ['AI_BASE_URL']+'/transcribe',headers={'Authorization':'Bearer '+os.environ['AI_API_KEY']},files={'file':open(f,'rb')},timeout=60);print(r.status_code,r.text[:300])"
+# explain: trigger an alert, then watch for "[AI] alert N explained"
+docker compose exec -T mqtt mosquitto_pub -u siaga -P "$MQTT_PASSWORD" -t siagamesin/sim/cmd -m "wear m2"
+docker compose logs -f --since 10s worker | grep -E "ANOMALI|AI\]|Explain"
+```
+
+**When AMD is slow or down**, nothing stalls: classification falls back to keywords (the stop is marked *Needs review*), and alerts keep their rule-based explanation. The worker retries `/explain` once after 20 s. Token Factory limits are **per team key** (20 requests/min plus a daily budget; check **Check Usage** on the Token Factory page), so don't load-test with it.
 
 ## E. How it works
 
 - **Stop detection:** `current_a < STOP_CURRENT_A` for `STOP_SECONDS` → new event. `live` machines get a Telegram question; `replay` machines get a reason from the simulator.
-- **Operator answers:** text or voice note → `/transcribe` → `/classify` → category. Confidence < 0.6 → **Needs review**. Every AI call is logged in `ai_calls`. Categories are stored in the role 3 contract values and shown in English (`labels.py`).
+- **Operator answers:** text or voice note → `/transcribe` (Whisper on the Pi) → `/classify` (Qwen on AMD) → category. Confidence < 0.6 → **Needs review**. Every AI call is logged in `ai_calls`. Categories are stored in the role 3 contract values and shown in English (`labels.py`).
+- **AI explanations:** each new alert (for machines in `EXPLAIN_SOURCES`) is sent to `/explain` in the background; the summary and sources are saved on the alert (dashboard) and posted as a reply to the Telegram early warning.
 - **Anomaly detection:** the 10-second average is compared with each sensor's baseline (median & spread) → z value. `z ≥ 3` for 5 seconds → alert + Telegram early warning; `z < 2` → back to normal. `anomaly_score = z ÷ 6` (max 1).
 - **Availability:** run time ÷ (run time + unplanned stops) within the selected range. Scheduled breaks and offline time are excluded. Shifts start at 06:00, 14:00 and 22:00 WIB (`SHIFT_STARTS` in `.env`).
 - **Safe restarts:** open events and alerts carry over after a restart, and every service waits for the database on boot.
@@ -224,6 +264,10 @@ If the AMD endpoint errors or is down, classification falls back to keywords so 
 | All machines ⚪ Offline in `/status` | Simulator off and rig not sending | `docker compose --profile sim up -d sim` |
 | `Not authorized` / `not authorised` in sim or worker logs | Missing or wrong MQTT login | Check `MQTT_PASSWORD` in `.env` matches `deploy/passwd`; rebuild the sim image after code changes: `docker compose --profile sim up -d --build sim` |
 | `mosquitto_sub` hangs with no output | Nothing is publishing (e.g. sim stopped or rejected) | Add `-W 10` to time out; check `docker compose logs sim --tail 5` |
+| Bot says "AI offline: keyword classifier used" | `/classify` timed out or hit the rate limit (often while an `/explain` is running) | `docker compose logs --since 3m ai \| grep -v health`; use `EXPLAIN_SOURCES=live` |
+| "Couldn't transcribe the voice note" | `stt` not ready (model still downloading) or failed | `docker compose logs --tail 10 stt`; wait for `Application startup complete` |
+| `401 Invalid LLMGateway API token` in `ai` logs | Wrong Token Factory key | Copy the `rc-...` key with **Copy to clipboard** on the Token Factory page into `RADEON_API_KEY` in `AI/.env` |
+| `429 Too Many Requests` in `ai` logs | Team key rate limit | Wait a minute; ask the team not to loop requests |
 | Public URL won't open | API down / Funnel off | `curl localhost:8000/health`, then `tailscale funnel status` |
 
 ## G. Security
@@ -233,11 +277,13 @@ If the AMD endpoint errors or is down, classification falls back to keywords so 
 - The public API only has GET endpoints.
 - The bot only answers the registered `TELEGRAM_CHAT_ID`.
 - Container logs are capped at 3 × 10 MB per service so the SD card doesn't fill up.
+- The Token Factory key only lives in `AI/.env` (mode `600`, not committed). Services talk to each other with random internal keys; `ai` and `stt` aren't exposed outside Docker.
 - MQTT requires a username/password (`deploy/passwd`, not committed). From the internet it is only reachable through Funnel on `:8443` with TLS.
 
 ## H. Remaining work
 
-- [ ] Connect real `/transcribe` + `/classify` (role 3), then `/explain`
+- [x] Real `/transcribe` (Whisper on the Pi) + `/classify` and `/explain` (Qwen on AMD)
+- [ ] Optional: Whisper on an AMD GPU instance (`WHISPER_BASE_URL`)
 - [ ] Live `m1` from the ESP32 rig + recompute baseline (role 1)
 - [ ] Measure pitch numbers with `tools/metrics.py` once there is enough data
 - [ ] Friday: keep the simulator running · Saturday: clear test data before recording

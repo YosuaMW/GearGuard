@@ -10,7 +10,9 @@
 | Same Wi-Fi as the Pi | `http://yosua.local:8000` |
 
 Swagger (try every endpoint): `<base URL>/docs`. Keep the base URL in an env var (e.g. `NEXT_PUBLIC_API_URL`).
-CORS: `http://localhost:3000` is allowed. **Send the Vercel URL** so it can be added. Every endpoint is **GET**.
+CORS: `http://localhost:3000` and `https://gearguard-sky.vercel.app` are allowed. **If the dashboard domain changes, tell Yosua** so it can be added to `CORS_ORIGINS`. Every endpoint is **GET**.
+
+Dashboard: **https://gearguard-sky.vercel.app** (the old `siaga-mesin.vercel.app` domain is gone).
 
 ## General rules
 
@@ -153,4 +155,6 @@ Machines: `m1` Conveyor motor (live rig) · `m2` Pump · `m3` Mixer · `m4` Comp
                 "calls_today": 12, "success_rate": 1.0, "avg_latency_ms": 820,
                 "prompt_tokens": null, "completion_tokens": null, "mock": false, "last_call": "..."}]}
 ```
+- Live now: `/transcribe` runs **Whisper on the Raspberry Pi** (model `faster-whisper-base-pi`); `/classify` and `/explain` run **Qwen3.8-27B on AMD Token Factory**. Please say this on the page (e.g. *"Speech-to-text runs on the edge gateway; classification and explanations run on AMD."*) so the page title doesn't overclaim.
+- `/explain` latency is ~30–50 s: the model reasons before answering. Alerts in `/alerts` get `explanation_source: "ai"` once it arrives; until then the rule-based text is shown.
 - Always 3 rows: `/transcribe`, `/classify`, `/explain`. While `mode = mock`, `model` is `mock` / `keyword-rules`; show "To be confirmed by role 3" when `mock = true` or `calls_today = 0`.

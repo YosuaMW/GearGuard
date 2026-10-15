@@ -4,9 +4,9 @@ What needs to be agreed so the backend (role 2) can connect to roles 1, 3 and 4.
 
 | Topic | Role | Priority | Status |
 |---|---|---|---|
-| `/transcribe` + `/classify` | 3 | 🔴 Required | Backend ready (mock mode), waiting for URL + API key |
-| `/explain` | 3 | 🟡 Important | Waiting for role 3 |
-| Dashboard API | 4 | 🟡 Important | ✅ Done, see [role4-frontend.md](role4-frontend.md). Waiting for Vercel URL |
+| `/transcribe` + `/classify` | 3 | 🔴 Required | ✅ Live: Whisper on the Pi + Qwen3.8-27B on AMD Token Factory |
+| `/explain` | 3 | 🟡 Important | ✅ Live (repair history as sources); PDF manuals still to add in `AI/manuals/` |
+| Dashboard API | 4 | 🟡 Important | ✅ Done, live at https://gearguard-sky.vercel.app |
 | `/score` | 1 | 🟢 Optional | Backend uses z-score fallback |
 | Extra vibration features | 1 | 🟢 Optional | Not needed unless the model asks |
 
@@ -45,7 +45,7 @@ Details: [role4-frontend.md](role4-frontend.md).
 
 - [x] Endpoints for every dashboard page (`/summary`, `/telemetry`, `/events`, `/alerts`, `/pareto`, `/availability`, `/ai-usage`)
 - [x] Machine names and English category labels match the dashboard
-- [ ] **Vercel URL** to add to CORS
+- [x] **Vercel URL** added to CORS (`gearguard-sky.vercel.app`)
 - [ ] Any field missing or shaped differently than the dashboard expects
 
 ## 🟢 4. `/score` · role 1 · optional
@@ -72,4 +72,6 @@ Used if the autoencoder is ready. Details: [role1-hardware.md](role1-hardware.md
 
 | Topic | Decision | By | Date |
 |---|---|---|---|
-| | | | |
+| STT | Token Factory has no working audio model → Whisper in the `stt` container on the Pi | Yosua | 15 Oct |
+| AI service | Role 3's `AI/` service runs on the Pi as the `ai` container | Yosua + role 3 | 15 Oct |
+| Dashboard domain | `gearguard-sky.vercel.app` | Yosua | 15 Oct |

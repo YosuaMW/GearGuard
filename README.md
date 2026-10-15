@@ -13,10 +13,9 @@ ESP32 + sensors ──MQTT──► Raspberry Pi (edge gateway, Docker Compose)
                            ├─ db     : PostgreSQL (telemetry, events, alerts, baselines, ai_calls)
                            ├─ worker : stores data, detects stops and anomalies
                            ├─ bot    : Telegram (asks operators, /status, early warnings)
-                           └─ api    : FastAPI (:8000) ──Tailscale Funnel──► public HTTPS
-                                          │                                   │
-                         AMD Developer Cloud ◄── called by backend        Dashboard (Vercel)
-                         (/transcribe, /classify, /explain)
+                           ├─ ai     : role 3 AI service ──► AMD Token Factory (Qwen3.8-27B: /classify, /explain)
+                           ├─ stt    : Whisper speech-to-text on the Pi CPU (/transcribe)
+                           └─ api    : FastAPI (:8000) ──Tailscale Funnel──► public HTTPS ──► Dashboard (Vercel)
 ```
 
 ## Docs by role
@@ -29,17 +28,18 @@ ESP32 + sensors ──MQTT──► Raspberry Pi (edge gateway, Docker Compose)
 | 4. Frontend | [docs/role4-frontend.md](docs/role4-frontend.md) | API URL, every endpoint, dashboard page → endpoint map |
 | Everyone | [docs/integration-checklist.md](docs/integration-checklist.md) | **What still needs to be agreed between roles, with deadlines** |
 
-## Status (14 Oct 2026)
+## Status (15 Oct 2026)
 
 - ✅ MQTT → database, stop detection, Telegram bot asks the operator
-- ✅ Operator text & voice answers → downtime category (mock mode, ready for AMD)
+- ✅ Operator text & voice answers → Whisper (Pi) → Qwen3.8-27B on AMD Token Factory → downtime category
+- ✅ Early warnings explained by Qwen with repair-history sources, posted on Telegram and the dashboard
 - ✅ 4 machines: m1 Conveyor motor (live rig), m2 Pump, m3 Mixer, m4 Compressor (replay simulator)
 - ✅ Z-score anomaly detection + detailed Telegram early warnings, `/status` command
 - ✅ Dashboard API: `/machines`, `/telemetry`, `/summary`, `/events`, `/alerts`, `/pareto`, `/availability`, `/ai-usage`
 - ✅ CORS, public HTTPS via Tailscale Funnel, Docker Compose with auto-start on boot (simulator included)
 - ✅ MQTT with username/password, reachable from the internet over TLS (`:8443`)
-- ✅ Dashboard live at https://siaga-mesin.vercel.app (code in [`dashboard/`](dashboard/))
-- ⏳ Real `/transcribe` + `/classify` (role 3), `/explain` (role 3), live ESP32 rig (role 1)
+- ✅ Dashboard live at https://gearguard-sky.vercel.app (code in [`dashboard/`](dashboard/))
+- ⏳ Live ESP32 rig (role 1), PDF manuals for `/explain` sources (role 3/5), optional Whisper on an AMD GPU
 
 ## Running
 

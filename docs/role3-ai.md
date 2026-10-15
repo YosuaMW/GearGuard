@@ -4,17 +4,21 @@ Contract between the Raspberry Pi backend and the AI endpoints on AMD Developer 
 
 > To agree on: see [integration-checklist.md](integration-checklist.md) item 1 (**required**) and item 2.
 
-## Connection direction
+## How it runs (current setup)
 
-**The Pi backend calls the AMD endpoints**, not the other way around. AMD never needs to reach the Pi; your endpoints only need to be reachable over HTTPS from the internet.
+Role 3's service in [`AI/`](../AI/) runs **on the Raspberry Pi as the `ai` container** (same Docker Compose as the backend). It needs no GPU because it calls AMD Token Factory over the internet.
 
-Send Yosua:
-- `AI_BASE_URL`, e.g. `https://xxxx.amd-cloud.example/`
-- `AI_API_KEY` (by DM, **never** in the group or repo)
+```
+bot / worker ──► ai :8001 ──► AMD Token Factory: Qwen3.8-27B   (/classify, /explain)
+                    └────► stt :9000: Whisper on the Pi CPU   (/transcribe)
+```
 
-Every request carries the header `Authorization: Bearer <AI_API_KEY>`.
-
-The backend is already wired up: until `AI_BASE_URL` is set it runs in **mock mode** (sample transcript + keyword classifier). Once the URL and key are in `.env`, it switches to your endpoints with no code change. If your endpoint errors or times out, classification falls back to keywords so the flow never stalls.
+- **Keys:** the Token Factory key (`rc-...`) is `RADEON_API_KEY` in `AI/.env` on the Pi only. The backend calls the service with an internal key (`AI_SERVICE_KEY` = backend `AI_API_KEY`). Never commit either. Template: [`AI/.env.example`](../AI/.env.example).
+- **Audio:** Token Factory rejects every audio request (`input_audio`, `audio_url` and `file` all fail at the gateway, tested 15 Oct), so `/transcribe` goes to Whisper (`WHISPER_BASE_URL`). Today that is the `stt` container on the Pi (faster-whisper, CPU, ~5 s per voice note). To run Whisper on an AMD GPU instead, serve `openai/whisper-large-v3` with vLLM on an AMD Developer Cloud droplet and point `WHISPER_BASE_URL` at it (`http://<ip>:8000/v1`).
+- **Honest labels, please:** `usage.gpu` is currently always `"AMD Radeon Cloud"` and `backend` says `whisper-amd`, even when Whisper runs on the Pi. Make the label follow the backend actually used (e.g. `"Raspberry Pi CPU"`), since the dashboard shows it to judges.
+- **Quota:** limits are per team key (20 requests/min plus a daily budget). The backend calls `/explain` only for machines in `EXPLAIN_SOURCES` and retries it once after 20 s.
+- **Speed:** `/explain` currently takes ~30–50 s. A lower `reasoning_effort` would make it snappier for the demo.
+- Mock mode still exists: empty `AI_BASE_URL` in the backend `.env` = sample transcript + keyword rules.
 
 ## 1. `POST /transcribe`
 
@@ -106,7 +110,7 @@ For `/transcribe`, `prompt_tokens`/`completion_tokens` may be `null`, but fill i
 
 ## 5. Quick test
 
-From a laptop, before handing over:
+From the Pi (inside the `bot` container the env vars are already set), or from a laptop with the same values:
 ```
 curl -H "Authorization: Bearer $AI_API_KEY" -F file=@voice.ogg $AI_BASE_URL/transcribe
 curl -H "Authorization: Bearer $AI_API_KEY" -H "Content-Type: application/json" \
