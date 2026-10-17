@@ -25,14 +25,14 @@ REPLAY = {
 LIVE_STANDIN = {"m1": {"name": "Conveyor motor", "cur": 1.8, "vib": 0.42, "temp": 41}}
 
 REASONS = {
-    "setup": ("Ganti produk/setup", "ganti mold untuk produk B"),
-    "material": ("Tunggu material", "material dari gudang belum datang"),
-    "break": ("Istirahat/terjadwal", "istirahat shift"),
-    "electrical": ("Breakdown – Listrik", "MCB trip, direset teknisi"),
-    "overheat": ("Breakdown – Overheat", "motor panas, didinginkan dulu"),
-    "other": ("Lainnya", "dicek QC"),
+    "setup": ("Ganti produk/setup", "changing the mold for product B"),
+    "material": ("Tunggu material", "material from the warehouse hasn't arrived"),
+    "break": ("Istirahat/terjadwal", "shift break"),
+    "electrical": ("Breakdown – Listrik", "breaker tripped, reset by technician"),
+    "overheat": ("Breakdown – Overheat", "motor overheated, cooling down"),
+    "other": ("Lainnya", "quality check"),
 }
-WEAR_REASON = ("Breakdown – Mekanik", "bearing aus, diganti teknisi")
+WEAR_REASON = ("Breakdown – Mekanik", "worn bearing, replaced by technician")
 CMD_TOPIC = "siagamesin/sim/cmd"
 
 
