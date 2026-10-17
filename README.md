@@ -21,16 +21,20 @@ GearGuard retrofits legacy factory machines with cheap current, vibration and te
 ## Architecture
 
 ```
-ESP32 + sensors ──MQTT (TLS)──► Raspberry Pi 4B (edge gateway, Docker Compose)
-(PZEM-004T, MPU6050, LM35)        ├─ mqtt   : Mosquitto (login required; :1883 LAN, :8443 TLS via Tailscale Funnel)
-                                  ├─ db     : PostgreSQL (telemetry, events, alerts, baselines, ai_calls)
-                                  ├─ worker : stores data, detects stops and anomalies, requests AI explanations
-                                  ├─ bot    : Telegram (asks operators, voice notes, /status, early warnings)
-                                  ├─ stt    : Whisper speech-to-text on the Pi CPU
-                                  ├─ ai     : AI service (/transcribe, /classify, /explain + RAG over manuals)
-                                  │             └──► AMD Token Factory · Qwen3.8-27B
-                                  ├─ sim    : replay simulator for m2–m4 (profile `sim`)
-                                  └─ api    : FastAPI :8000 ──Tailscale Funnel──► HTTPS ──► Dashboard (Next.js on Vercel)
+ESP32 + sensors (SCT-013, MPU6050, LM35)
+        │ MQTT over TLS
+        ▼
+Raspberry Pi 4B · edge gateway · Docker Compose
+ ├─ mqtt    Mosquitto, login required (:1883 LAN, :8443 TLS)
+ ├─ db      PostgreSQL (telemetry, events, alerts, baselines)
+ ├─ worker  stores data, detects stops and anomalies
+ ├─ bot     Telegram: asks operators, early warnings
+ ├─ stt     Whisper speech-to-text on the Pi CPU
+ ├─ ai      /transcribe, /classify, /explain + RAG on manuals
+ │            └─► AMD Token Factory · Qwen3.8-27B
+ ├─ sim     replay simulator for m2–m4
+ └─ api     FastAPI :8000
+              └─► Tailscale Funnel (HTTPS) ─► Dashboard on Vercel
 ```
 
 | Task | Runs on | Model |

@@ -39,7 +39,7 @@ The broker can be reached two ways. **Option A is recommended**: it works from a
 | Field | Required | Notes |
 |---|---|---|
 | `machine_id` | ✅ | `m1` for the live rig |
-| `current_a` | ✅ | Motor current (A), from the PZEM-004T |
+| `current_a` | ✅ | Motor current (A), from the SCT-013 clamp |
 | `vib_rms` | ✅ | **Vibration RMS over 1 second**, not raw samples. Compute it on the ESP32 from hundreds of accelerometer samples |
 | `temp_c` | ✅ | Motor body temperature (°C), from the LM35 |
 | `ts` | optional | ISO 8601 UTC. If omitted, the backend uses the Pi's clock (recommended unless the ESP32 is NTP-synced) |
@@ -63,11 +63,11 @@ The ESP32 only needs to join the **same Wi-Fi as the Pi** and publish one JSON m
 
 | Sensor | Pins | Notes |
 |---|---|---|
-| PZEM-004T v3 (current) | TX → GPIO16 (RX2), RX → GPIO17 (TX2), 5 V → VIN, GND | CT clamp around **one** wire (live) of the motor's power cable; 220 V wiring stays inside the closed box with the MCB |
+| SCT-013 (current) | Clamp output → bias circuit → **GPIO35** | Non-invasive clamp around **one** wire (live) of the motor's power cable; no 220 V wiring to the ESP32. Bias the output to mid-supply with two 10 kΩ resistors (3V3–GND) and a 10 µF capacitor. The SCT-013-000 (current output) also needs a burden resistor (~33 Ω); the -030/-050 types have one built in |
 | MPU6050 (vibration) | SDA → GPIO21, SCL → GPIO22, VCC → 3V3, GND | Mount it firmly on the motor body (bolt or strong double tape) |
 | LM35 (temperature) | VCC → VIN (5 V), OUT → **GPIO34**, GND | Taped to the motor housing. Needs ≥ 4 V supply; output is only ~10 mV/°C so it is safe for the ESP32 ADC |
 
-Arduino libraries: `PubSubClient`, `PZEM004Tv30`, `Adafruit MPU6050` (+ `Adafruit Unified Sensor`). `WiFi`, `WiFiClientSecure` and `ESPmDNS` are built into the ESP32 core. Board: **ESP32 Dev Module**.
+Arduino libraries: `PubSubClient`, `EmonLib` (current RMS from the SCT-013), `Adafruit MPU6050` (+ `Adafruit Unified Sensor`). `WiFi`, `WiFiClientSecure` and `ESPmDNS` are built into the ESP32 core. Board: **ESP32 Dev Module**.
 
 **Vibration RMS:** sample the accelerometer ~400 times over 1 second, subtract the average of each axis (removes gravity and offset), take the RMS of what remains, and convert m/s² to g (÷ 9.80665). Send that single number as `vib_rms`.
 
@@ -136,7 +136,7 @@ void loop() {
   if (!mqtt.connected()) connectMqtt();
   mqtt.loop();
 
-  float current = readCurrent();   // PZEM-004T
+  float current = readCurrent();   // SCT-013 via EmonLib (calcIrms)
   float vibRms  = readVibRms();    // RMS of accelerometer samples over ~1 s
   float temp    = readTemp();      // LM35
 
