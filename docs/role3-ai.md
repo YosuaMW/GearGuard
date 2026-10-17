@@ -116,7 +116,7 @@ curl -H "Authorization: Bearer $AI_API_KEY" -F file=@voice.ogg $AI_BASE_URL/tran
 curl -H "Authorization: Bearer $AI_API_KEY" -H "Content-Type: application/json" \
      -d '{"text":"material dari gudang belum datang"}' $AI_BASE_URL/classify
 ```
-Real voice notes from the bot are on the Pi (`data/voice/event_*.ogg`). Ask Yosua if you want them for testing; they are not in the repo.
+Real voice notes from the bot are on the Pi (`data/voice/event_*.ogg`). Ask role 2 (backend) if you want them for testing; they are not in the repo.
 
 ## Reminders
 

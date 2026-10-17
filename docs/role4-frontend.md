@@ -10,7 +10,7 @@
 | Same Wi-Fi as the Pi | `http://yosua.local:8000` |
 
 Swagger (try every endpoint): `<base URL>/docs`. Keep the base URL in an env var (e.g. `NEXT_PUBLIC_API_URL`).
-CORS: `http://localhost:3000` and `https://gearguard-sky.vercel.app` are allowed. **If the dashboard domain changes, tell Yosua** so it can be added to `CORS_ORIGINS`. Every endpoint is **GET**.
+CORS: `http://localhost:3000` and `https://gearguard-sky.vercel.app` are allowed. **If the dashboard domain changes, tell role 2 (backend)** so it can be added to `CORS_ORIGINS`. Every endpoint is **GET**.
 
 Dashboard: **https://gearguard-sky.vercel.app** (the old `siaga-mesin.vercel.app` domain is gone).
 

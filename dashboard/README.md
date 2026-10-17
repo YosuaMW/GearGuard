@@ -51,7 +51,7 @@ Optional: `NEXT_PUBLIC_DOWNTIME_COST_PER_MIN` sets the default cost of one minut
 
 ## Backend contract
 
-The API is owned by role 2: [docs/role4-frontend.md](https://github.com/YosuaMW/SiagaMesin/blob/main/docs/role4-frontend.md).
+The API is owned by role 2: [docs/role4-frontend.md](https://github.com/YosuaMW/GearGuard/blob/main/docs/role4-frontend.md).
 The same shapes are typed in [`src/lib/types.ts`](src/lib/types.ts). Times arrive in UTC and are shown in WIB.
 
 | Dashboard part | Endpoint | Poll |

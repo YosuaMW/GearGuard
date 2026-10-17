@@ -15,7 +15,7 @@ The broker can be reached two ways. **Option A is recommended**: it works from a
 | Arduino client | `WiFiClientSecure` + `setInsecure()` | `WiFiClient` |
 | Works on | any Wi-Fi: phone hotspot, campus, home | only the Pi's network, without client isolation |
 
-- **Login is required on both:** username `siaga`, password from Yosua (shared privately; never put it in the repo).
+- **Login is required on both:** username `siaga`, password from role 2 (backend) (shared privately; never put it in the repo).
 - Option A goes through Tailscale Funnel, which handles TLS, so traffic and password are encrypted.
 - Option B: the Pi's IP can change, so resolve `yosua.local` with **ESPmDNS**. Campus/public Wi-Fi usually blocks device-to-device traffic, so use Option A there.
 
@@ -45,9 +45,9 @@ The broker can be reached two ways. **Option A is recommended**: it works from a
 | `ts` | optional | ISO 8601 UTC. If omitted, the backend uses the Pi's clock (recommended unless the ESP32 is NTP-synced) |
 | `name`, `source` | optional | `source` defaults to `live` |
 
-**Stop detection:** the backend treats the machine as stopped when `current_a < 0.3` A for ≥ 5 seconds. If your rig's idle current differs, tell Yosua so the threshold (`STOP_CURRENT_A` in `.env`) can be changed.
+**Stop detection:** the backend treats the machine as stopped when `current_a < 0.3` A for ≥ 5 seconds. If your rig's idle current differs, tell role 2 (backend) so the threshold (`STOP_CURRENT_A` in `.env`) can be changed.
 
-Need extra features for the model (e.g. `vib_peak`, FFT bands)? Add the fields to the JSON and tell Yosua so database columns can be added.
+Need extra features for the model (e.g. `vib_peak`, FFT bands)? Add the fields to the JSON and tell role 2 (backend) so database columns can be added.
 
 ## 3. Connecting the ESP32 to the backend
 
@@ -107,7 +107,7 @@ const char* PASS      = "WIFI_PASSWORD";
 const char* MQTT_HOST = "yosua.tailf140ab.ts.net";
 const int   MQTT_PORT = 8443;
 const char* MQTT_USER = "siaga";
-const char* MQTT_PASS = "ASK_YOSUA";
+const char* MQTT_PASS = "ASK_ROLE_2";
 
 WiFiClientSecure net;
 PubSubClient mqtt(net);
@@ -165,7 +165,7 @@ Then send `/status` to the Telegram bot, or open `/machines` on the API.
 Anomaly detection compares live data with each machine's normal condition. The `m1` baseline currently comes from simulated data, so:
 
 1. Run the rig **normally** (no disturbances) for **15–30 minutes**.
-2. Ask Yosua to run `docker compose exec worker python /app/tools/baseline.py --minutes 30` on the Pi.
+2. Ask role 2 (backend) to run `docker compose exec worker python /app/tools/baseline.py --minutes 30` on the Pi.
 
 Without this step, real data will be flagged as anomalous right away.
 
@@ -200,7 +200,7 @@ ts,machine_id,current_a,vib_rms,temp_c
 ```
 Record 30–60 minutes of normal operation, plus 3 kinds of disturbance (e.g. an unbalanced weight on a fan blade, blocked airflow, motor held back). Note the start and end time of each disturbance.
 
-Rig data already in the database can be exported by Yosua:
+Rig data already in the database can be exported by role 2 (backend):
 ```
 docker compose exec -T db psql -U siaga -d siagamesin -c "\copy (SELECT ts,machine_id,current_a,vib_rms,temp_c FROM telemetry WHERE machine_id='m1' ORDER BY ts) TO STDOUT CSV HEADER" > m1.csv
 ```

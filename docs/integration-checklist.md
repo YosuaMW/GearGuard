@@ -72,6 +72,6 @@ Used if the autoencoder is ready. Details: [role1-hardware.md](role1-hardware.md
 
 | Topic | Decision | By | Date |
 |---|---|---|---|
-| STT | Token Factory has no working audio model → Whisper in the `stt` container on the Pi | Yosua | 15 Oct |
-| AI service | Role 3's `AI/` service runs on the Pi as the `ai` container | Yosua + role 3 | 15 Oct |
-| Dashboard domain | `gearguard-sky.vercel.app` | Yosua | 15 Oct |
+| STT | Token Factory has no working audio model → Whisper in the `stt` container on the Pi | Role 2 | 15 Oct |
+| AI service | Role 3's `AI/` service runs on the Pi as the `ai` container | Role 2 + role 3 | 15 Oct |
+| Dashboard domain | `gearguard-sky.vercel.app` | Role 2 | 15 Oct |
