@@ -5,7 +5,7 @@ What needs to be agreed so the backend (role 2) can connect to roles 1, 3 and 4.
 | Topic | Role | Priority | Status |
 |---|---|---|---|
 | `/transcribe` + `/classify` | 3 | 🔴 Required | ✅ Live: Whisper on the Pi + Qwen3.8-27B on AMD Token Factory |
-| `/explain` | 3 | 🟡 Important | ✅ Live (repair history as sources); PDF manuals still to add in `AI/manuals/` |
+| `/explain` | 3 | 🟡 Important | ✅ Live: cites PDF manuals (per-machine `MANUAL_MAP`) and repair history |
 | Dashboard API | 4 | 🟡 Important | ✅ Done, live at https://gearguard-sky.vercel.app |
 | `/score` | 1 | 🟢 Optional | Backend uses z-score fallback |
 | Extra vibration features | 1 | 🟢 Optional | Not needed unless the model asks |

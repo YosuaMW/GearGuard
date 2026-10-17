@@ -3,72 +3,116 @@
 **Log why machines stop, then learn to keep them from stopping again.**
 AMD Developer Hackathon ACT III · Track: Intelligent Industry
 
-GearGuard monitors legacy factory machines through current, vibration and temperature sensors. When a machine stops, the operator is asked why on Telegram (text or voice note). When the sensor pattern starts drifting, the system sends an early warning before the machine fails.
+GearGuard retrofits legacy factory machines with cheap current, vibration and temperature sensors. When a machine stops, the operator is asked why on Telegram and can answer by text or voice note. AI turns that answer into a downtime category. When the sensor pattern starts drifting, GearGuard sends an early warning, and an AI running on AMD explains it with citations from the machine's manual and repair history.
+
+- **Dashboard:** https://gearguard-sky.vercel.app
+- **Public API:** https://yosua.tailf140ab.ts.net (Swagger at `/docs`)
+
+## How it works
+
+1. **Machine stops.** The worker sees current drop below `STOP_CURRENT_A` and opens a stop event.
+2. **Operator is asked.** The Telegram bot asks "why did M3 stop?". The operator replies with text or a voice note.
+3. **Speech to text on the edge.** Whisper (faster-whisper, base) transcribes the voice note on the Raspberry Pi CPU.
+4. **Classified on AMD.** Qwen3.8-27B on AMD Token Factory maps the answer to one of 7 downtime categories. Low confidence is flagged "Needs review".
+5. **Early warning.** Z-score anomaly detection on each machine's baseline sends an early warning to Telegram and the dashboard.
+6. **Explained with sources.** Qwen on AMD explains the alert (summary, actions, urgency). It uses BM25 retrieval over the machine's PDF manual and recent repair notes. The explanation is posted as a reply to the warning and shown on the dashboard.
+7. **Reports.** The dashboard shows availability, the downtime Pareto, the timeline and every AI call ("Running on AMD").
 
 ## Architecture
 
 ```
-ESP32 + sensors ──MQTT──► Raspberry Pi (edge gateway, Docker Compose)
-                           ├─ mqtt   : Mosquitto broker (login required; :1883 LAN, :8443 TLS via Funnel)
-                           ├─ db     : PostgreSQL (telemetry, events, alerts, baselines, ai_calls)
-                           ├─ worker : stores data, detects stops and anomalies
-                           ├─ bot    : Telegram (asks operators, /status, early warnings)
-                           ├─ ai     : role 3 AI service ──► AMD Token Factory (Qwen3.8-27B: /classify, /explain)
-                           ├─ stt    : Whisper speech-to-text on the Pi CPU (/transcribe)
-                           └─ api    : FastAPI (:8000) ──Tailscale Funnel──► public HTTPS ──► Dashboard (Vercel)
+ESP32 + sensors ──MQTT (TLS)──► Raspberry Pi 4B (edge gateway, Docker Compose)
+(PZEM-004T, MPU6050, LM35)        ├─ mqtt   : Mosquitto (login required; :1883 LAN, :8443 TLS via Tailscale Funnel)
+                                  ├─ db     : PostgreSQL (telemetry, events, alerts, baselines, ai_calls)
+                                  ├─ worker : stores data, detects stops and anomalies, requests AI explanations
+                                  ├─ bot    : Telegram (asks operators, voice notes, /status, early warnings)
+                                  ├─ stt    : Whisper speech-to-text on the Pi CPU
+                                  ├─ ai     : AI service (/transcribe, /classify, /explain + RAG over manuals)
+                                  │             └──► AMD Token Factory · Qwen3.8-27B
+                                  ├─ sim    : replay simulator for m2–m4 (profile `sim`)
+                                  └─ api    : FastAPI :8000 ──Tailscale Funnel──► HTTPS ──► Dashboard (Next.js on Vercel)
 ```
 
-## Docs by role
-
-| Role | Document | Contents |
+| Task | Runs on | Model |
 |---|---|---|
-| 1. Hardware & anomaly model | [docs/role1-hardware.md](docs/role1-hardware.md) | MQTT format, ESP32 example, `/score`, data recording |
-| 2. Backend & bot | [docs/raspi-setup.md](docs/raspi-setup.md) | Raspberry Pi setup from scratch, daily commands, troubleshooting |
-| 3. AI engineer | [docs/role3-ai.md](docs/role3-ai.md) | `/transcribe`, `/classify`, `/explain` contracts, usage data |
-| 4. Frontend | [docs/role4-frontend.md](docs/role4-frontend.md) | API URL, every endpoint, dashboard page → endpoint map |
-| Everyone | [docs/integration-checklist.md](docs/integration-checklist.md) | **What still needs to be agreed between roles, with deadlines** |
+| Voice note → text | Raspberry Pi (edge) | faster-whisper base |
+| Text → downtime category | AMD Token Factory | Qwen3.8-27B |
+| Alert explanation with manual sources | AMD Token Factory | Qwen3.8-27B |
+| Stop and anomaly detection | Raspberry Pi | z-score on a median/scale baseline |
 
-## Status (15 Oct 2026)
+Token Factory serves language models but not audio, so speech-to-text runs on the Pi next to the line.
 
-- ✅ MQTT → database, stop detection, Telegram bot asks the operator
-- ✅ Operator text & voice answers → Whisper (Pi) → Qwen3.8-27B on AMD Token Factory → downtime category
-- ✅ Early warnings explained by Qwen with repair-history sources, posted on Telegram and the dashboard
-- ✅ 4 machines: m1 Conveyor motor (live rig), m2 Pump, m3 Mixer, m4 Compressor (replay simulator)
-- ✅ Z-score anomaly detection + detailed Telegram early warnings, `/status` command
-- ✅ Dashboard API: `/machines`, `/telemetry`, `/summary`, `/events`, `/alerts`, `/pareto`, `/availability`, `/ai-usage`
-- ✅ CORS, public HTTPS via Tailscale Funnel, Docker Compose with auto-start on boot (simulator included)
-- ✅ MQTT with username/password, reachable from the internet over TLS (`:8443`)
-- ✅ Dashboard live at https://gearguard-sky.vercel.app (code in [`dashboard/`](dashboard/))
-- ⏳ Live ESP32 rig (role 1), PDF manuals for `/explain` sources (role 3/5), optional Whisper on an AMD GPU
+## Machines
+
+| ID | Machine | Source |
+|---|---|---|
+| m1 | Conveyor motor | **Live ESP32 rig** over public MQTT |
+| m2 | Pump | Replay simulator |
+| m3 | Mixer | Replay simulator |
+| m4 | Compressor | Replay simulator |
+
+## Status (17 Oct 2026)
+
+- ✅ Live ESP32 rig (m1) streaming over public MQTT with TLS and login
+- ✅ Stop detection → Telegram question → text/voice answer → Whisper (Pi) → Qwen (AMD) → category
+- ✅ Early warnings with AI explanations citing PDF manuals (per-machine `MANUAL_MAP`) and repair history, posted as a Telegram reply and on the dashboard
+- ✅ Dashboard live: overview, machines, reports (availability, Pareto), "Running on AMD" with per-call logging
+- ✅ Alert limits editable from the dashboard (`PUT /machines/{id}/limits`, protected by an admin key)
+- ✅ Docker Compose with auto-start on boot, public HTTPS via Tailscale Funnel
+- ⏳ Next: Whisper on an AMD GPU, faster `/explain` (currently ~1 min per alert), more machines per line
 
 ## Running
 
 ```
-cp .env.example .env                       # fill in the Telegram token, etc.
+cp .env.example .env              # Telegram token, MQTT login, keys
+cp AI/.env.example AI/.env        # Token Factory key, internal keys, MANUAL_MAP
+# put PDF manuals in AI/manuals/  (not committed)
 docker compose up -d --build
-docker compose --profile sim up -d sim     # optional: replay machine simulator
+docker compose --profile sim up -d --build sim   # replay simulator for m2–m4
 ```
-Full details: [docs/raspi-setup.md](docs/raspi-setup.md). API docs (Swagger): `http://localhost:8000/docs`.
+Full setup from a blank Pi: [docs/raspi-setup.md](docs/raspi-setup.md).
+
+### Demo controls (simulator)
+
+```
+mosquitto_pub -u siaga -P "$MQTT_PASSWORD" -t siagamesin/sim/cmd -m "calm"                 # no random events
+mosquitto_pub -u siaga -P "$MQTT_PASSWORD" -t siagamesin/sim/cmd -m "wear m3"              # drift → early warning
+mosquitto_pub -u siaga -P "$MQTT_PASSWORD" -t siagamesin/sim/cmd -m "stop m4 20 material"  # forced stop
+mosquitto_pub -u siaga -P "$MQTT_PASSWORD" -t siagamesin/sim/cmd -m "random"               # back to normal mode
+```
+
+## API
+
+Read-only endpoints for the dashboard: `/health`, `/machines`, `/machines/{id}`, `/telemetry`, `/summary`, `/events`, `/alerts`, `/pareto`, `/availability`, `/ai-usage`.
+
+The only write endpoint is `PUT /machines/{id}/limits`. It needs the `X-Admin-Key` header, and is turned off when `ADMIN_KEY` is empty. Details: [docs/role4-frontend.md](docs/role4-frontend.md).
 
 ## Connecting the hardware
 
-The ESP32 on the live rig publishes one JSON message per second to MQTT topic `siagamesin/m1/telemetry`. It can connect from **any network** (phone hotspot, campus Wi-Fi):
+The ESP32 publishes one JSON message per second to `siagamesin/m1/telemetry`:
+
+```json
+{"machine_id": "m1", "current_a": 1.8, "vib_rms": 0.42, "temp_c": 41.5}
+```
 
 | | Host | Port | Notes |
 |---|---|---|---|
 | Internet (recommended) | `yosua.tailf140ab.ts.net` | `8443` | TLS: use `WiFiClientSecure` |
 | Same Wi-Fi as the Pi | `yosua.local` | `1883` | plain `WiFiClient` |
 
-Username `siaga`; the password is shared privately by Yosua (never in the repo).
+Username `siaga`; the password is shared privately. Wiring, example code and a test checklist: [docs/role1-hardware.md](docs/role1-hardware.md).
 
-```json
-{"machine_id": "m1", "current_a": 1.8, "vib_rms": 0.42, "temp_c": 41.5}
-```
+## Team & docs
 
-The backend stores it, detects stops and anomalies, asks the operator on Telegram and serves it to the dashboard. The simulator only covers m2–m4, so it never clashes with the rig. Wiring (PZEM-004T, MPU6050, LM35), example code and a test checklist: [docs/role1-hardware.md](docs/role1-hardware.md).
+| Role | Document |
+|---|---|
+| 1. Hardware & sensors | [docs/role1-hardware.md](docs/role1-hardware.md) |
+| 2. Backend, edge gateway & bot | [docs/raspi-setup.md](docs/raspi-setup.md) |
+| 3. AI engineer (AMD Token Factory) | [docs/role3-ai.md](docs/role3-ai.md) · [AI/README.md](AI/README.md) |
+| 4. Frontend dashboard | [docs/role4-frontend.md](docs/role4-frontend.md) · [dashboard/](dashboard/) |
+| Everyone | [docs/integration-checklist.md](docs/integration-checklist.md) |
 
 ## Repo rules
 
-- **Never commit `.env`**, bot tokens, database/MQTT passwords or API keys. Use `.env.example`.
-- `deploy/passwd` (MQTT password hashes) is not committed either.
-- The `data/` folder (operator voice notes) is not committed.
+- **Never commit** `.env`, `AI/.env`, bot tokens, MQTT/database passwords or API keys. Use the `.env.example` files.
+- Not committed either: `deploy/passwd` (MQTT password hashes), `data/` (voice notes), `AI/manuals/` (PDF manuals).
