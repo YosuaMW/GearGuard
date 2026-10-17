@@ -13,6 +13,7 @@ import type {
   Alert,
   AvailabilityReport,
   CategoryId,
+  LimitsUpdate,
   Machine,
   MachineStatus,
   Pareto,
@@ -334,15 +335,26 @@ function availability(range = "shift"): AvailabilityReport {
   return { window: shiftWindow(range), line_availability: r(run / (run + down), 4), machines };
 }
 
+const limitOverrides = new Map<string, LimitsUpdate>();
+
+/** Browser simulator: keep edited limits for this page session. */
+export async function mockPutLimits(machineId: string, body: LimitsUpdate) {
+  await new Promise((res) => setTimeout(res, 300));
+  limitOverrides.set(machineId, { ...limitOverrides.get(machineId), ...body });
+  return machines().find((m) => m.id === machineId)?.baseline ?? {};
+}
+
 function machines(): Machine[] {
   return SPECS.map((s) => {
     const live = state.machines.get(s.id)!;
     const open = state.events.find((e) => e.machine_id === s.id && e.ongoing);
     const baseline = Object.fromEntries(
-      (Object.keys(s.base) as SensorKey[]).map((k) => [
-        k,
-        { normal: s.base[k], limit_high: r(s.base[k] + 3 * s.spread[k], 3), limit_low: r(s.base[k] - 3 * s.spread[k], 3) },
-      ]),
+      (Object.keys(s.base) as SensorKey[]).map((k) => {
+        const o = limitOverrides.get(s.id)?.[k];
+        const normal = o?.normal ?? s.base[k];
+        const high = o?.limit_high ?? r(s.base[k] + 3 * s.spread[k], 3);
+        return [k, { normal, limit_high: high, limit_low: r(2 * normal - high, 3) }];
+      }),
     );
     return {
       id: s.id,

@@ -32,13 +32,14 @@ export default function ReportsPage() {
   // New fetcher when the range changes, so the polling hook picks it up on its next tick.
   const fetchPareto = useCallback(() => api.pareto(range), [range]);
   const fetchAvail = useCallback(() => api.availability(range), [range]);
-  const fetchEvents = useCallback(() => api.events({ range, limit: 500 }), [range]);
+  const { machines: live } = usePlant();
+  const ids = (live?.map((m) => m.id) ?? ["m1", "m2", "m3", "m4"]).join(",");
+  const fetchEvents = useCallback(() => api.allEvents(range, ids.split(",")), [range, ids]);
   const fetchAlerts = useCallback(() => api.alerts({ range }), [range]);
   const pareto = usePolling(fetchPareto, 10_000).data;
   const avail = usePolling(fetchAvail, 10_000).data;
   const events = usePolling(fetchEvents, 5_000).data;
   const alerts = usePolling(fetchAlerts, 5_000).data;
-  const { machines: live } = usePlant();
   const { costPerMin } = usePrefs();
   const wide = useWide();
 

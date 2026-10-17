@@ -21,6 +21,9 @@ export interface Limit {
   limit_low: number | null;
 }
 
+/** PUT /machines/{id}/limits: any subset of sensors. limit_low mirrors limit_high around normal. */
+export type LimitsUpdate = Partial<Record<SensorKey, { normal: number; limit_high: number }>>;
+
 /** GET /machines */
 export interface Machine {
   id: string;

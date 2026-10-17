@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AlertExplanation } from "@/components/AlertPanel";
 import { EventList } from "@/components/EventList";
+import { LimitsEditor } from "@/components/LimitsEditor";
 import { condition } from "@/components/MachineStatus";
 import { TrendChart } from "@/components/TrendChart";
 import { clockSec, num, score100 } from "@/lib/format";
@@ -69,7 +70,7 @@ export function MachineDetail({ id }: { id: string }) {
       )}
 
       {!m.baseline && (
-        <p className="text-sm text-ink-2">Alert limits appear once the backend has learned this machine&apos;s normal pattern.</p>
+        <p className="text-sm text-ink-2">No alert limits yet. Set them below, or let the backend learn this machine&apos;s normal pattern.</p>
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -77,6 +78,8 @@ export function MachineDetail({ id }: { id: string }) {
           <SensorPanel key={s.key} machine={m} series={series} sensor={s} />
         ))}
       </div>
+
+      <LimitsEditor key={m.id} machine={m} />
 
       <section className="rounded-xl border border-rule bg-panel p-4">
         <h2 className="text-[15px] font-semibold">Stops and operator answers today</h2>

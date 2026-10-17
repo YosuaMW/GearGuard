@@ -60,3 +60,45 @@ html {
   .alarm-breathe, .warn-breathe, .toast-in { animation: none; }
   * { transition: none !important; }
 }
+
+/* Two thumbs on one track (alert limits editor): the inputs are stacked,
+   only their thumbs take the pointer. */
+.gg-range {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.gg-range::-webkit-slider-runnable-track { background: transparent; height: 100%; }
+.gg-range::-moz-range-track { background: transparent; }
+.gg-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--thumb, var(--color-steel));
+  box-shadow: 0 1px 3px rgb(23 32 43 / 0.25);
+  cursor: grab;
+}
+.gg-range::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--thumb, var(--color-steel));
+  box-shadow: 0 1px 3px rgb(23 32 43 / 0.25);
+  cursor: grab;
+}
+.gg-range:active::-webkit-slider-thumb { cursor: grabbing; }
+.gg-range:focus-visible { outline: none; }
+.gg-range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--color-steel); outline-offset: 2px; }
+.gg-range:focus-visible::-moz-range-thumb { outline: 2px solid var(--color-steel); outline-offset: 2px; }

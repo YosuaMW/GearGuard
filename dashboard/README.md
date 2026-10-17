@@ -45,6 +45,8 @@ Optional: `NEXT_PUBLIC_DOWNTIME_COST_PER_MIN` sets the default cost of one minut
   latency and success rate
 - **Lead time**: an alert followed by a stop shows "warned 85 s before the stop"; Reports shows the average.
   Computed in the browser from `/alerts` and `/events`
+- **Alert limits** (machine page): drag "normal" and "alert above" per sensor, or fill them from the last 15 minutes
+  of running data, then save to the backend
 - **Notifications**: a notice for every new alert, stop and operator answer; the bell in the header turns on a sound
 
 ## Backend contract
@@ -63,6 +65,19 @@ The same shapes are typed in [`src/lib/types.ts`](src/lib/types.ts). Times arriv
 | Running on AMD | `/ai-usage` | 10 s |
 
 The backend must allow the dashboard's origin in `CORS_ORIGINS` (send the Vercel URL to role 2).
+
+### Alert limits (needs one endpoint from role 2)
+
+`PUT /machines/{id}/limits` with any subset of sensors:
+
+```json
+{ "vib_rms": { "normal": 1.80, "limit_high": 2.40 }, "temp_c": { "normal": 29.0, "limit_high": 34.0 } }
+```
+
+The backend stores it in `baselines.stats` as `median = normal`, `scale = (limit_high − normal) / ANOMALY_Z_ALERT`
+(the worker reloads baselines every 60 s) and returns the machine's new `baseline` in the `/machines` shape.
+CORS must allow `PUT` and the `Content-Type` header. Until the endpoint exists, saving shows an error and nothing
+changes. With the browser simulator, saved limits last until the page reloads.
 
 ## Deploy (Vercel)
 

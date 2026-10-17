@@ -3,14 +3,17 @@
 // - NEXT_PUBLIC_API_URL set    → GearGuard FastAPI on the Pi (role 2)
 // When login is added later, attach the token in `get()` only.
 
-import { mockGet } from "./mock";
+import { mockGet, mockPutLimits } from "./mock";
 import type {
   AiUsage,
   Alert,
   AvailabilityReport,
   Machine,
   Pareto,
+  Limit,
+  LimitsUpdate,
   Range,
+  SensorKey,
   StopEvent,
   Summary,
   TelemetryResponse,
@@ -46,4 +49,36 @@ export const api = {
   pareto: (range: Range = "shift") => get<Pareto>("/pareto", { range }),
   availability: (range: Range = "shift") => get<AvailabilityReport>("/availability", { range }),
   aiUsage: () => get<AiUsage>("/ai-usage"),
+  /**
+   * Change a machine's alert limits (role 2 endpoint, see README "Alert limits").
+   * Body: { vib_rms: { normal, limit_high }, ... }. Returns the machine's new baseline.
+   */
+  setLimits: async (machineId: string, body: LimitsUpdate) => {
+    if (USING_SIMULATOR) return mockPutLimits(machineId, body);
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}/machines/${machineId}/limits`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw new Error("The backend didn't accept the request (unreachable, or PUT not allowed in CORS yet).");
+    }
+    if (res.status === 404 || res.status === 405)
+      throw new Error("The backend doesn't support changing limits yet (PUT /machines/{id}/limits).");
+    if (!res.ok) throw new Error(`Saving failed (${res.status}).`);
+    return (await res.json()) as Partial<Record<SensorKey, Limit>>;
+  },
+  /**
+   * Every stop in a range for the timeline. The backend returns at most 500 rows per call,
+   * and a busy shift has more, so ask per machine and merge (newest first).
+   */
+  allEvents: async (range: Range, machineIds: string[]) => {
+    const lists = await Promise.all(
+      machineIds.map((machine_id) => get<StopEvent[]>("/events", { range, machine_id, limit: 500 })),
+    );
+    const byId = new Map(lists.flat().map((e) => [e.id, e]));
+    return [...byId.values()].sort((a, b) => b.start_ts.localeCompare(a.start_ts));
+  },
 };
