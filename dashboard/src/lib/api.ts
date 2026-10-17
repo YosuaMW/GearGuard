@@ -55,11 +55,18 @@ export const api = {
    */
   setLimits: async (machineId: string, body: LimitsUpdate) => {
     if (USING_SIMULATOR) return mockPutLimits(machineId, body);
+    const KEY_STORE = "gearguard-admin-key";
+    let adminKey = "";
+    try {
+      adminKey = localStorage.getItem(KEY_STORE) ?? "";
+    } catch {}
+    if (!adminKey) adminKey = (window.prompt("Admin key to change alert limits") ?? "").trim();
+    if (!adminKey) throw new Error("An admin key is needed to save limits.");
     let res: Response;
     try {
       res = await fetch(`${API_URL}/machines/${machineId}/limits`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Admin-Key": adminKey },
         body: JSON.stringify(body),
       });
     } catch {
@@ -67,7 +74,17 @@ export const api = {
     }
     if (res.status === 404 || res.status === 405)
       throw new Error("The backend doesn't support changing limits yet (PUT /machines/{id}/limits).");
+    if (res.status === 401) {
+      try {
+        localStorage.removeItem(KEY_STORE);
+      } catch {}
+      throw new Error("Wrong admin key. Try saving again.");
+    }
+    if (res.status === 403) throw new Error("Changing limits is turned off on the backend.");
     if (!res.ok) throw new Error(`Saving failed (${res.status}).`);
+    try {
+      localStorage.setItem(KEY_STORE, adminKey);
+    } catch {}
     return (await res.json()) as Partial<Record<SensorKey, Limit>>;
   },
   /**

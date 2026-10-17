@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import time
@@ -5,7 +6,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv, find_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv(find_dotenv())
@@ -35,7 +37,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="GearGuard API", version="0.2.0", lifespan=lifespan)
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "PUT"], allow_headers=["*"])
 
 _cache = {}
 
@@ -430,3 +432,49 @@ async def machine_detail(machine_id: str):
         if m["id"] == machine_id:
             return m
     raise HTTPException(404, "machine not found")
+
+
+# ---------------------------------------------------------------- alert limits (dashboard)
+
+class LimitIn(BaseModel):
+    normal: float
+    limit_high: float
+
+
+ADMIN_KEY = os.getenv("ADMIN_KEY", "")
+
+
+@app.put("/machines/{machine_id}/limits")
+async def set_limits(machine_id: str, body: dict[str, LimitIn], x_admin_key: str = Header("")):
+    """Set normal + alert limit per sensor. Stored like tools/baseline.py: median = normal, scale = (limit_high - normal) / Z_ALERT."""
+    if not ADMIN_KEY:
+        raise HTTPException(403, "limit editing is disabled on this server (ADMIN_KEY not set)")
+    if not hmac.compare_digest(x_admin_key.encode(), ADMIN_KEY.encode()):
+        raise HTTPException(401, "wrong admin key")
+    unknown = set(body) - set(FEATURES)
+    if unknown:
+        raise HTTPException(400, f"unknown sensor: {', '.join(sorted(unknown))}")
+    for f, lim in body.items():
+        if lim.limit_high <= lim.normal:
+            raise HTTPException(400, f"{f}: limit_high must be above normal")
+
+    row = await pool().fetchrow(
+        "SELECT m.machine_id, b.stats FROM machines m LEFT JOIN baselines b USING (machine_id) WHERE m.machine_id = $1",
+        machine_id,
+    )
+    if not row:
+        raise HTTPException(404, "machine not found")
+
+    stats = jload(row["stats"]) or {}
+    for f, lim in body.items():
+        stats[f] = {"median": round(lim.normal, 4), "scale": round((lim.limit_high - lim.normal) / Z_ALERT, 4)}
+    if set(stats) != set(FEATURES):  # anomaly.py needs all three sensors
+        raise HTTPException(400, "first save needs current_a, vib_rms and temp_c")
+
+    await pool().execute(
+        """INSERT INTO baselines (machine_id, stats, computed_at) VALUES ($1, $2, now())
+           ON CONFLICT (machine_id) DO UPDATE SET stats = EXCLUDED.stats, computed_at = now()""",
+        machine_id, json.dumps(stats),
+    )
+    print(f"[LIMITS] {machine_id} updated from dashboard: {stats}")
+    return baseline_out(stats)
