@@ -63,7 +63,6 @@ Token Factory serves language models but not audio, so speech-to-text runs on th
 - ✅ Dashboard live: overview, machines, reports (availability, Pareto), "Running on AMD" with per-call logging
 - ✅ Alert limits editable from the dashboard (`PUT /machines/{id}/limits`, protected by an admin key)
 - ✅ Docker Compose with auto-start on boot, public HTTPS via Tailscale Funnel
-- ⏳ Next: Whisper on an AMD GPU, faster `/explain` (currently ~1 min per alert), more machines per line
 
 ## Running
 
