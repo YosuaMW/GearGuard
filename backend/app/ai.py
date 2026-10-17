@@ -117,7 +117,7 @@ async def explain(pool, payload):
         return None
     started = time.monotonic()
     try:
-        async with httpx.AsyncClient(timeout=70) as c:
+        async with httpx.AsyncClient(timeout=95) as c:
             r = await c.post(f"{_base()}/explain", headers=_headers(), json=payload)
         r.raise_for_status()
         data = r.json()

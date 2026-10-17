@@ -20,6 +20,7 @@ STOP_SEC = int(os.getenv("STOP_SECONDS", "5"))
 GAP_S = int(os.getenv("DATA_GAP_SECONDS", "30"))   # data putus lebih lama dari ini = event ditutup
 NOTIFY_SOURCES = set(os.getenv("ALERT_NOTIFY_SOURCES", "live,replay").split(","))
 EXPLAIN_SOURCES = set(os.getenv("EXPLAIN_SOURCES", "live,replay").split(","))
+_explain_sem = asyncio.Semaphore(1)   # satu /explain sekaligus, sisanya antre
 _bg = set()   # referensi task latar belakang supaya tidak dibuang garbage collector
 
 state = {}
@@ -124,10 +125,11 @@ async def explain_alert(pool, mid, source, aid, ts, r, msg_id):
             "recent_events": [{"ts": e["start_ts"].isoformat(), "category": e["category"],
                                "transcript": e["transcript"]} for e in evs],
         }
-        data = await ai.explain(pool, payload)
-        if not data:
-            await asyncio.sleep(20)
+        async with _explain_sem:
             data = await ai.explain(pool, payload)
+            if not data:
+                await asyncio.sleep(20)
+                data = await ai.explain(pool, payload)
         if not data or not data.get("summary"):
             return
         async with pool.acquire() as c:
